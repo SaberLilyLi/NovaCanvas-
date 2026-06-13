@@ -1,10 +1,14 @@
 export {
+  ImageComposer,
   NovaCanvasComposer,
   ImageComposerPage,
+  ImageComposerWorkspace,
   ComposerInput,
   MessageList,
+  type ImageComposerSharedProps,
   type NovaCanvasComposerProps,
   type ImageComposerPageProps,
+  type ImageComposerWorkspaceProps,
   type ComposerInputProps,
   type MessageListProps,
 } from './composer';
@@ -14,5 +18,32 @@ export {
   useNovaCanvasClient,
   type NovaCanvasProviderProps,
 } from './provider';
+export {
+  generateCoreConfig,
+  createGenerateProvider,
+  createGenerateTaskStore,
+  GenerateTaskManager,
+  useGenerate,
+  useGenerateController,
+  useGenerateHistory,
+  useGenerateSession,
+  useGenerateViewModel,
+  type CreateOptimisticTasksInput,
+  type CreateOptimisticTasksResult,
+  type GenerateCoreConfig,
+  type GenerateProvider,
+  type GenerateSubmitResult,
+  type GenerateTaskFilter,
+  type GenerateTaskManagerOptions,
+  type GenerateTaskQueryResult,
+  type GenerateTaskStore,
+  type GenerateTransportType,
+  type PersistedGenerateTaskSnapshot,
+  type ResolveSubmittedTasksInput,
+  type UseGenerateControllerOptions,
+  type UseGenerateHistoryOptions,
+  type UseGenerateSessionOptions,
+  type UseGenerateOptions,
+} from './generate-core';
 export { createNovaCanvasClient } from '@novacanvas/sdk';
 export type * from '@novacanvas/types';

@@ -1,13 +1,18 @@
 import type { Message } from '@company/ai-studio-sdk/types';
-import type { ConversationMessage, GeneratedImage, GenerationTask, PromptSuggestion } from '@novacanvas/types';
-import type { ResolutionTier } from './image-size-settings';
-import type { NovaConversationItem } from './nova-conversation-view';
+import type {
+  ConversationMessage,
+  GeneratedImage,
+  GenerationTask,
+  PromptSuggestion,
+} from '@novacanvas/types';
+import { IMAGE_OPTIMIZE_PROMPT } from './generation-image-actions';
 import {
   buildGenerationSlots,
   isBatchComplete,
   isBatchRenderedInHistory,
 } from './generation-slots';
-import { IMAGE_OPTIMIZE_PROMPT } from './generation-image-actions';
+import type { ResolutionTier } from './image-size-settings';
+import type { NovaConversationItem } from './nova-conversation-view';
 import { isRegenerateUserMessage, resolveLastUserPrompt } from './resolve-last-user-prompt';
 
 export interface TurnMeta {
@@ -41,11 +46,15 @@ export interface BuildConversationItemsOptions {
   resolution: ResolutionTier;
 }
 
+function isSplitHintMessage(message: ConversationMessage): boolean {
+  return message.role === 'assistant' && message.content.includes('已拆分为');
+}
+
 function findUserPrompt(messages: ConversationMessage[], fromIndex: number): string {
   for (let index = fromIndex - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
     if (message.role === 'user') return message.content;
-    if (message.role === 'assistant' && message.content.includes('已拆分为')) continue;
+    if (isSplitHintMessage(message)) continue;
   }
   return '';
 }
@@ -148,7 +157,7 @@ function buildHistoryItems(
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index]!;
 
-    if (message.role === 'assistant' && message.content.includes('已拆分为')) {
+    if (isSplitHintMessage(message)) {
       continue;
     }
 
@@ -210,7 +219,7 @@ function buildHistoryItems(
           content: message.content,
           createdAt: new Date(message.createdAt).getTime(),
           status: 'success',
-        },
+        } satisfies Message,
       });
       continue;
     }
@@ -224,7 +233,7 @@ function buildHistoryItems(
           content: message.content,
           createdAt: new Date(message.createdAt).getTime(),
           status: 'success',
-        },
+        } satisfies Message,
       });
     }
   }

@@ -2,7 +2,7 @@ import type { GenerationTask } from '@novacanvas/types';
 import type { NovaConversationItem } from './nova-conversation-view';
 
 export const GENERATION_BUSY_MESSAGE =
-  '当前有图片正在生成，请等待完成后再操作';
+  '当前有图片正在生成，请等待完成后再操作。';
 
 export const GENERATION_BUSY_PLACEHOLDER =
   '图片生成中，请等待完成后再操作...';

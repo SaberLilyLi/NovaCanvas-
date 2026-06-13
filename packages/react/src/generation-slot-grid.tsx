@@ -59,7 +59,10 @@ function GenerationSlotItem(props: {
 
   return (
     <div className="nova-generation-placeholder">
-      <GenerationLoadingMotion seed={slot.taskId} className="nova-generation-loading-motion--slot" />
+      <GenerationLoadingMotion
+        seed={`${slot.taskId}:${slot.index}`}
+        className="nova-generation-loading-motion--slot"
+      />
       {showProgressBadge && (
         <span className="nova-generation-placeholder__badge">
           {formatGenerationProgressLabel(progress)}

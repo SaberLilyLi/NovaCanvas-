@@ -108,6 +108,7 @@ export class NovaCanvasClient {
     conversationId: string,
     onEvent: (event: NovaCanvasSocketEvent) => void,
     onStatus?: (status: NovaCanvasConnectionStatus) => void,
+    onReconcile?: () => void,
   ): () => void {
     onStatus?.('connecting');
     const socket: Socket = io(`${this.baseUrl}/conversation`, {
@@ -120,7 +121,15 @@ export class NovaCanvasClient {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
     });
-    socket.on('connect', () => onStatus?.('connected'));
+    const reconcile = () => onReconcile?.();
+    socket.on('connect', () => {
+      onStatus?.('connected');
+      reconcile();
+    });
+    socket.io.on('reconnect', () => {
+      onStatus?.('connected');
+      reconcile();
+    });
     socket.on('disconnect', () => onStatus?.('disconnected'));
     socket.on('connect_error', () => onStatus?.('error'));
     socket.on('task_event', onEvent);

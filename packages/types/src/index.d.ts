@@ -71,55 +71,29 @@ export interface CreateGenerationInput {
     userId?: string;
     bizType: BizType;
     sceneType?: string;
+    model?: string;
     prompt: string;
     imageIds?: string[];
+    selectedImageId?: string;
     count?: number;
     size?: ImageSize;
     metadata?: Record<string, unknown>;
+    regenerateFromPrompt?: string;
+}
+export interface PromptSuggestion {
+    title: string;
+    prompt: string;
+}
+export interface PromptSuggestionsInput {
+    bizType: BizType;
+    sceneType?: string;
+    model?: string;
+    lastUserPrompt: string;
+}
+export interface PromptSuggestionsResponse {
+    suggestions: PromptSuggestion[];
 }
 export interface CreateGenerationResponse {
     conversationId: string;
     tasks: Array<Pick<GenerationTask, 'id' | 'status'>>;
-}
-export interface UploadImageResponse {
-    imageId: string;
-    url: string;
-    image: UploadedImage;
-}
-export interface ApiErrorResponse {
-    message: string;
-    statusCode?: number;
-}
-export type NovaCanvasSocketEvent = {
-    type: 'task_update';
-    taskId: string;
-    status: TaskStatus;
-    progress: number;
-} | {
-    type: 'task_success';
-    taskId: string;
-    status: 'success';
-    image: GeneratedImage;
-} | {
-    type: 'task_failed';
-    taskId: string;
-    status: 'failed';
-    errorMessage: string;
-};
-export interface BizScene {
-    value: string;
-    label: string;
-    description: string;
-    promptHint: string;
-}
-export interface BizConfig {
-    bizType: BizType;
-    title: string;
-    description: string;
-    enableConversation: boolean;
-    enableMultiImage: boolean;
-    enableImageEdit: boolean;
-    defaultRatioOptions: string[];
-    supportedSceneTypes: BizScene[];
-    quickPrompts: string[];
 }

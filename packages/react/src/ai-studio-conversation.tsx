@@ -1,13 +1,14 @@
-import { useMemo } from 'react';
 import { AiComposer } from '@company/ai-studio-sdk/react';
 import type { ComposerAttachment } from '@company/ai-studio-sdk/types';
 import type { GeneratedImage, ImageResolutionCap } from '@novacanvas/types';
+import { useMemo, useRef } from 'react';
 import '@company/ai-studio-sdk/styles.css';
-import { GENERATION_BUSY_PLACEHOLDER } from './generation-lock';
 import { ComposerSizePicker } from './composer-size-picker';
+import { GENERATION_BUSY_PLACEHOLDER } from './generation-lock';
 import type { ImageSizeSettings } from './image-size-settings';
 import type { NovaConversationItem } from './nova-conversation-view';
 import { NovaConversationView } from './nova-conversation-view';
+import { useComposerCompact } from './use-composer-compact';
 
 export interface AiStudioConversationProps {
   theme: 'light' | 'dark';
@@ -47,13 +48,17 @@ export function AiStudioConversation(props: AiStudioConversationProps) {
   );
 
   const composerDisabled = props.isSubmitting || Boolean(props.isInteractionLocked);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const isComposerCompact =
+    useComposerCompact(messagesRef, !props.isEmpty, composerDisabled) &&
+    !composerDisabled;
 
   return (
     <div
       className={`nova-composer__ai-studio ${props.isEmpty ? 'is-empty' : 'has-messages'}`}
       data-theme={props.theme === 'dark' ? 'dark' : 'light'}
     >
-      <div className="nova-composer__ai-studio-messages">
+      <div ref={messagesRef} className="nova-composer__ai-studio-messages">
         <NovaConversationView
           items={props.items}
           enableImageEdit={props.enableImageEdit}
@@ -65,8 +70,22 @@ export function AiStudioConversation(props: AiStudioConversationProps) {
           onSuggestionSelect={props.onSuggestionSelect}
         />
       </div>
-      <div className="nova-composer__ai-studio-composer">
-        <div className="nova-composer__composer-shell">
+      <div
+        className={[
+          'nova-composer__ai-studio-composer',
+          isComposerCompact ? 'is-compact' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <div
+          className={[
+            'nova-composer__composer-shell',
+            isComposerCompact ? 'is-compact' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
           <AiComposer
             defaultValue={props.defaultValue ?? ''}
             theme={props.theme === 'dark' ? 'dark' : 'light'}
@@ -75,8 +94,8 @@ export function AiStudioConversation(props: AiStudioConversationProps) {
                 ? GENERATION_BUSY_PLACEHOLDER
                 : '请描述你想生成的图片...'
             }
-            minRows={2}
-            maxRows={6}
+            minRows={isComposerCompact ? 1 : 2}
+            maxRows={isComposerCompact ? 1 : 6}
             showActionOptions
             actionOptions={actionOptions}
             disabled={composerDisabled}

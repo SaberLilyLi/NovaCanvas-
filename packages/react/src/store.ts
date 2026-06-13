@@ -14,7 +14,9 @@ export interface NovaCanvasStore extends ConversationState {
   mergeConversation: (conversation: ConversationState) => void;
   addImages: (images: UploadedImage[]) => void;
   addMessage: (message: ConversationMessage) => void;
-  setTasks: (tasks: GenerationTask[]) => void;
+  setTasks: (
+    tasksOrUpdater: GenerationTask[] | ((currentTasks: GenerationTask[]) => GenerationTask[]),
+  ) => void;
   patchTask: (taskId: string, patch: Partial<GenerationTask>) => void;
   setSelectedImageId: (imageId?: string) => void;
   setLatestImageId: (imageId?: string) => void;
@@ -47,7 +49,13 @@ export const createNovaCanvasStore = (bizType: BizType, sceneType?: string) =>
           : state.latestImageId,
       })),
     addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
-    setTasks: (tasks) => set({ tasks }),
+    setTasks: (tasksOrUpdater) =>
+      set((state) => ({
+        tasks:
+          typeof tasksOrUpdater === 'function'
+            ? tasksOrUpdater(state.tasks)
+            : tasksOrUpdater,
+      })),
     patchTask: (taskId, patch) =>
       set((state) => ({
         tasks: state.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task)),

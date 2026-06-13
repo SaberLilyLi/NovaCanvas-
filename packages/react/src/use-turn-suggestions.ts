@@ -8,6 +8,7 @@ export function useTurnSuggestions(input: {
   client: NovaCanvasClient;
   bizType: BizType;
   sceneType?: string;
+  model?: string;
   items: NovaConversationItem[];
   turnMetaById: Record<string, TurnMeta>;
   onTurnMetaChange: (
@@ -42,6 +43,7 @@ export function useTurnSuggestions(input: {
         .getPromptSuggestions({
           bizType: input.bizType,
           sceneType: input.sceneType,
+          model: input.model,
           lastUserPrompt: turnPrompt,
         })
         .then((result) => {
@@ -61,7 +63,15 @@ export function useTurnSuggestions(input: {
           setLoadingTurnIds((current) => current.filter((id) => id !== turn.id));
         });
     }
-  }, [input.bizType, input.client, input.items, input.onTurnMetaChange, input.sceneType, input.turnMetaById]);
+  }, [
+    input.bizType,
+    input.client,
+    input.items,
+    input.model,
+    input.onTurnMetaChange,
+    input.sceneType,
+    input.turnMetaById,
+  ]);
 
   return { loadingTurnIds };
 }

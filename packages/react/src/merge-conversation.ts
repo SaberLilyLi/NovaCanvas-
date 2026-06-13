@@ -93,11 +93,55 @@ function mergeMessages(
   return [...incoming, ...dedupedOptimistic];
 }
 
+function isPrimitive(value: unknown): value is null | undefined | string | number | boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
+}
+
+function areValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+
+  if (isPrimitive(left) || isPrimitive(right)) {
+    return false;
+  }
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+
+    return left.every((item, index) => areValuesEqual(item, right[index]));
+  }
+
+  if (
+    typeof left !== 'object' ||
+    typeof right !== 'object' ||
+    left === null ||
+    right === null
+  ) {
+    return false;
+  }
+
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  return leftEntries.every(([key, value]) => areValuesEqual(value, (right as Record<string, unknown>)[key]));
+}
+
 export function mergeConversationState(
   local: ConversationState,
   incoming: ConversationState,
 ): ConversationState {
-  return {
+  const merged = {
     ...incoming,
     messages: mergeMessages(local.messages, incoming.messages),
     images: mergeImages(local.images, incoming.images),
@@ -106,4 +150,6 @@ export function mergeConversationState(
     selectedImageId: incoming.selectedImageId ?? local.selectedImageId,
     latestResultGroupId: incoming.latestResultGroupId ?? local.latestResultGroupId,
   };
+
+  return areValuesEqual(local, merged) ? local : merged;
 }

@@ -1,11 +1,14 @@
 import type { ComposerAttachment } from '@company/ai-studio-sdk/types';
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Button,
-  Message,
-  Progress,
-  Tooltip,
-} from '@arco-design/web-react';
+import { Progress, Tooltip } from '@arco-design/web-react';
+import { useQuery } from '@tanstack/react-query';
+import { getBizConfig } from '@novacanvas/biz-config';
+import type {
+  BizType,
+  CanvasMode,
+  GeneratedImage,
+  GenerationTask,
+  ImageResolutionCap,
+} from '@novacanvas/types';
 import {
   Check,
   Clock3,
@@ -18,48 +21,39 @@ import {
   Sun,
   X,
 } from 'lucide-react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { getBizConfig } from '@novacanvas/biz-config';
-import type {
-  BizType,
-  CanvasMode,
-  GeneratedImage,
-  GenerationTask,
-  ImageResolutionCap,
-} from '@novacanvas/types';
-import type {
-  NovaCanvasConnectionStatus,
-  NovaCanvasSocketEvent,
-  UploadImageResponse,
-} from '@novacanvas/sdk';
-import { NovaCanvasProvider, useNovaCanvas, useNovaCanvasClient } from './provider';
+import { useEffect, useRef, useState } from 'react';
 import { AiStudioConversation } from './ai-studio-conversation';
+import { ConnectionStatusBanner } from './connection-status-banner';
+import { clearConversationSession } from './conversation-session';
+import { readConversationIdFromUrl, writeConversationIdToUrl } from './conversation-url';
 import {
-  buildConversationItems,
-  type ActiveGenerationBatch,
-  type TurnMeta,
-} from './build-conversation-items';
-import {
-  buildGenerationSlots,
-  isBatchComplete,
-  isBatchRenderedInHistory,
-} from './generation-slots';
-import { createOptimisticBatch } from './optimistic-batch';
-import { useTurnSuggestions } from './use-turn-suggestions';
-import {
-  GENERATION_BUSY_MESSAGE,
-  isConversationGenerating,
-} from './generation-lock';
+  generateCoreConfig,
+  type GenerateTransportType,
+  useGenerateController,
+  useGenerateHistory,
+} from './generate-core';
 import {
   clampSettingsToMaxResolution,
   createDefaultImageSizeSettings,
+  getDimensionsForRatio,
   normalizeRatio,
-  settingsToImageSize,
   type ImageSizeSettings,
 } from './image-size-settings';
+import { NovaCanvasProvider, useNovaCanvas, useNovaCanvasClient } from './provider';
 import './styles.scss';
 
-export interface ImageComposerPageProps {
+export interface ImageComposerSharedProps {
+  runtimeConfig?: {
+    provider?: GenerateTransportType;
+    models?: {
+      generation?: string;
+      suggestions?: string;
+    };
+  };
+  modelConfig?: {
+    generationModel?: string;
+    suggestionModel?: string;
+  };
   userId?: string;
   bizType: BizType;
   sceneType?: string;
@@ -81,26 +75,44 @@ export interface ImageComposerPageProps {
   onError?: (error: Error) => void;
 }
 
-function ImageComposerWorkspace(props: ImageComposerPageProps) {
+export interface ImageComposerWorkspaceProps extends ImageComposerSharedProps {}
+
+export interface ImageComposerPageProps extends ImageComposerSharedProps {
+  apiBaseUrl?: string;
+  authToken?: string;
+}
+
+function resolveRuntimeConfig(props: ImageComposerSharedProps) {
+  return {
+    provider: props.runtimeConfig?.provider ?? generateCoreConfig.provider,
+    generationModel:
+      props.runtimeConfig?.models?.generation ?? props.modelConfig?.generationModel,
+    suggestionModel:
+      props.runtimeConfig?.models?.suggestions ?? props.modelConfig?.suggestionModel,
+  };
+}
+
+export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
   const client = useNovaCanvasClient();
   const state = useNovaCanvas();
+  const mergeConversation = useNovaCanvas((store) => store.mergeConversation);
+  const setConversationId = useNovaCanvas((store) => store.setConversationId);
+  const resetConversation = useNovaCanvas((store) => store.reset);
+  const runtimeConfig = resolveRuntimeConfig(props);
   const config = getBizConfig(props.bizType);
   const [sceneType] = useState(props.sceneType ?? config.supportedSceneTypes[0]?.value ?? '');
   const [imageSizeSettings, setImageSizeSettings] = useState<ImageSizeSettings>(() =>
     createDefaultImageSizeSettings(normalizeRatio(config.defaultRatioOptions[0] ?? '1:1')),
   );
   const [count, setCount] = useState(1);
-  const [theme, setTheme] = useState(props.theme ?? 'dark');
+  const [theme, setTheme] = useState(props.theme ?? 'light');
   const [composerSeed, setComposerSeed] = useState({
     key: 0,
     text: props.defaultPrompt ?? '',
   });
-  const [connectionStatus, setConnectionStatus] =
-    useState<NovaCanvasConnectionStatus>('disconnected');
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeBatches, setActiveBatches] = useState<ActiveGenerationBatch[]>([]);
-  const [turnMetaById, setTurnMetaById] = useState<Record<string, TurnMeta>>({});
+  const batchesRestoredRef = useRef(false);
 
   const healthQuery = useQuery({
     queryKey: ['novacanvas-health', props.apiBaseUrl],
@@ -126,395 +138,209 @@ function ImageComposerWorkspace(props: ImageComposerPageProps) {
         : false,
   });
 
+  const controller = useGenerateController({
+    bizType: props.bizType,
+    sceneType,
+    userId: props.userId,
+    metadata: props.metadata,
+    model: runtimeConfig.generationModel,
+    provider: runtimeConfig.provider,
+    imageSizeSettings,
+    conversationItems: [],
+    onGenerated: props.onGenerated,
+    onError: props.onError,
+    onReconcile: () => {
+      void conversationQuery.refetch();
+    },
+    sessionOptions: {
+      onExternalConversationChange: (conversationId: string) => {
+        batchesRestoredRef.current = false;
+        setConversationId(conversationId);
+        writeConversationIdToUrl(conversationId);
+      },
+      onSessionCleared: () => {
+        batchesRestoredRef.current = false;
+        resetConversation(props.bizType, sceneType);
+        writeConversationIdToUrl(null);
+      },
+    },
+  });
+  const {
+    sessionState,
+    viewModel,
+    connectionStatus,
+    generatedImages,
+    activeTasks,
+    showConnectionBanner,
+    isGenerationLocked,
+    isSubmitting,
+    submit,
+    continueEdit,
+    regenerate,
+    retryTask,
+    acceptSuggestion,
+    resetForNewConversation,
+    syncConversation,
+    subscribeConversation,
+    resolveInitialConversationId,
+  } = controller;
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    if (conversationQuery.data) state.mergeConversation(conversationQuery.data);
-  }, [conversationQuery.data]);
+    writeConversationIdToUrl(state.conversationId || null);
+  }, [state.conversationId]);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+
+    const fromUrl = readConversationIdFromUrl();
+    batchesRestoredRef.current = false;
+
+    const conversationId = resolveInitialConversationId(fromUrl);
+    if (conversationId) {
+      initializedRef.current = true;
+      setConversationId(conversationId);
+      return;
+    }
+
+    initializedRef.current = true;
+    resetConversation(props.bizType, sceneType);
+    resetForNewConversation();
+  }, [
+    props.bizType,
+    resetConversation,
+    resetForNewConversation,
+    resolveInitialConversationId,
+    sceneType,
+    setConversationId,
+  ]);
+
+  useEffect(() => {
+    if (conversationQuery.data) {
+      mergeConversation(conversationQuery.data);
+    }
+  }, [conversationQuery.data, mergeConversation]);
+
+  useEffect(() => {
+    if (!conversationQuery.data || batchesRestoredRef.current) return;
+    batchesRestoredRef.current = true;
+
+    const imageSize = sessionState.session?.imageSize;
+    if (imageSize) {
+      const { width, height } = getDimensionsForRatio(
+        imageSize.ratioLabel,
+        imageSize.resolution,
+      );
+      setImageSizeSettings(
+        clampSettingsToMaxResolution(
+          {
+            ratio: imageSize.ratioLabel,
+            resolution: imageSize.resolution,
+            width,
+            height,
+            linked: true,
+          },
+          maxImageResolution,
+        ),
+      );
+    }
+
+    syncConversation();
+  }, [conversationQuery.data, maxImageResolution, sessionState.session?.imageSize, syncConversation]);
+
+  useEffect(() => {
+    if (!conversationQuery.isError) return;
+
+    const message = (conversationQuery.error as Error | undefined)?.message ?? '';
+    if (!message.includes('404') && !message.includes('不存在')) return;
+
+    clearConversationSession(props.bizType);
+    sessionState.reload();
+    writeConversationIdToUrl(null);
+    batchesRestoredRef.current = false;
+    resetConversation(props.bizType, sceneType);
+    resetForNewConversation();
+  }, [
+    conversationQuery.error,
+    conversationQuery.isError,
+    props.bizType,
+    resetConversation,
+    resetForNewConversation,
+    sceneType,
+    sessionState,
+  ]);
 
   useEffect(() => {
     if (!state.conversationId) return;
-    return client.connectConversation(
-      state.conversationId,
-      (event: NovaCanvasSocketEvent) => {
-        if (event.type === 'task_update') {
-          state.patchTask(event.taskId, { status: event.status, progress: event.progress });
-        } else if (event.type === 'task_success') {
-          state.patchTask(event.taskId, {
-            status: 'success',
-            progress: 100,
-            resultImageId: event.image.id,
-            resultImage: event.image,
-          });
-          state.addImages([event.image]);
-          state.setLatestImageId(event.image.id);
-          props.onGenerated?.([event.image]);
-          void conversationQuery.refetch();
-        } else {
-          state.patchTask(event.taskId, {
-            status: 'failed',
-            errorMessage: event.errorMessage,
-          });
-        }
-      },
-      (status: NovaCanvasConnectionStatus) => {
-        setConnectionStatus(status);
-        if (status === 'connected') void conversationQuery.refetch();
-      },
-    );
-  }, [client, state.conversationId]);
+    return subscribeConversation(state.conversationId);
+  }, [state.conversationId, subscribeConversation]);
 
   useEffect(() => {
     props.onTaskChange?.(state.tasks);
-  }, [state.tasks, props.onTaskChange]);
+  }, [props.onTaskChange, state.tasks]);
 
-  interface GenerationRequest {
-    prompt: string;
-    imageIds: string[];
-    selectedImageId?: string;
-    batchId: string;
-    taskCount: number;
-    regenerateFromPrompt?: string;
-  }
-
-  const beginOptimisticBatch = (input: {
-    batchId: string;
-    prompt: string;
-    taskCount: number;
-    inputImageIds?: string[];
-    actionType?: ActiveGenerationBatch['actionType'];
-    lastUserPrompt?: string;
-  }) => {
-    const optimistic = createOptimisticBatch({
-      batchId: input.batchId,
-      count: input.taskCount,
-      prompt: input.prompt,
-      ratioLabel: imageSizeSettings.ratio,
-      resolution: imageSizeSettings.resolution,
-      inputImageIds: input.inputImageIds,
-    });
-
-    setActiveBatches((batches) => [
-      ...batches,
-      {
-        ...optimistic.batch,
-        actionType: input.actionType,
-        lastUserPrompt: input.lastUserPrompt,
-      },
-    ]);
-    state.setTasks([...state.tasks, ...optimistic.tasks]);
-  };
-
-  const rollbackOptimisticBatch = (batchId: string) => {
-    setActiveBatches((batches) => batches.filter((batch) => batch.id !== batchId));
-    state.setTasks(state.tasks.filter((task) => task.resultGroupId !== batchId));
-  };
-
-  const generationMutation = useMutation({
-    mutationFn: (request: GenerationRequest) =>
-      client.createGeneration({
-        conversationId: state.conversationId || undefined,
-        userId: props.userId,
-        bizType: props.bizType,
-        sceneType,
-        prompt: request.prompt,
-        imageIds: request.imageIds,
-        selectedImageId: request.selectedImageId,
-        count: request.taskCount,
-        size: settingsToImageSize(imageSizeSettings),
-        metadata: props.metadata,
-        regenerateFromPrompt: request.regenerateFromPrompt,
-      }),
-    onSuccess: (result, request) => {
-      state.setConversationId(result.conversationId);
-      const hasReferences = request.imageIds.length > 0 || Boolean(request.selectedImageId);
-      const batchId = request.batchId;
-
-      setActiveBatches((batches) =>
-        batches.map((batch) =>
-          batch.id === batchId
-            ? {
-                ...batch,
-                taskIds: result.tasks.map((task) => task.id),
-                suggestions: result.regenerateContext?.suggestions ?? batch.suggestions,
-                lastUserPrompt:
-                  result.regenerateContext?.lastUserPrompt ?? batch.lastUserPrompt,
-              }
-            : batch,
-        ),
-      );
-
-      if (result.regenerateContext) {
-        setTurnMetaById((meta) => ({
-          ...meta,
-          [batchId]: {
-            actionType: 'regenerate',
-            lastUserPrompt: result.regenerateContext!.lastUserPrompt,
-            suggestions: result.regenerateContext!.suggestions,
-          },
-        }));
-      }
-
-      state.setTasks([
-        ...state.tasks.filter((task) => task.resultGroupId !== batchId),
-        ...result.tasks.map(
-          (task, index): GenerationTask => ({
-            id: task.id,
-            status: task.status,
-            progress: 0,
-            taskType: hasReferences ? 'text_image_to_image' : 'text_to_image',
-            prompt: request.prompt,
-            inputImageIds: request.imageIds.length
-              ? request.imageIds
-              : request.selectedImageId
-                ? [request.selectedImageId]
-                : [],
-            resultGroupId: batchId,
-            imageIndex: index + 1,
-          }),
-        ),
-      ]);
-      setComposerSeed((seed) => ({ key: seed.key + 1, text: '' }));
-      window.setTimeout(() => void conversationQuery.refetch(), 300);
-    },
-    onError: (error: Error, request) => {
-      rollbackOptimisticBatch(request.batchId);
-      Message.error(error.message);
-      props.onError?.(error);
-    },
-  });
-
-  const generatedImages = useMemo(
-    () => state.images.filter((image): image is GeneratedImage => image.type === 'generated'),
-    [state.images],
-  );
-  const conversationItems = useMemo(
-    () =>
-      buildConversationItems({
-        messages: state.messages,
-        images: generatedImages,
-        tasks: state.tasks,
-        activeBatches,
-        turnMetaById,
-        ratioLabel: imageSizeSettings.ratio,
-        resolution: imageSizeSettings.resolution,
-      }),
-    [activeBatches, generatedImages, imageSizeSettings, state.messages, state.tasks, turnMetaById],
-  );
-
-  const { loadingTurnIds } = useTurnSuggestions({
+  const { items: conversationItems, loadingTurnIds } = useGenerateHistory({
     client,
     bizType: props.bizType,
     sceneType,
-    items: conversationItems,
-    turnMetaById,
-    onTurnMetaChange: setTurnMetaById,
+    model: runtimeConfig.suggestionModel,
+    messages: state.messages,
+    images: generatedImages,
+    tasks: state.tasks,
+    activeBatches: viewModel.activeBatches,
+    turnMetaById: viewModel.turnMetaById,
+    ratioLabel: imageSizeSettings.ratio,
+    resolution: imageSizeSettings.resolution,
+    onTurnMetaChange: viewModel.setTurnMetaById,
   });
 
-  useEffect(() => {
-    setActiveBatches((batches) => {
-      const next: ActiveGenerationBatch[] = [];
-
-      for (const batch of batches) {
-        const slots = buildGenerationSlots(batch.taskIds, state.tasks, generatedImages);
-        const complete = isBatchComplete(slots);
-        const renderedInHistory = isBatchRenderedInHistory(
-          batch.taskIds,
-          state.tasks,
-          state.messages,
-        );
-
-        if (
-          complete &&
-          renderedInHistory &&
-          (batch.actionType === 'regenerate' || batch.actionType === 'refine')
-        ) {
-          const groupId = state.tasks.find((task) => batch.taskIds.includes(task.id))
-            ?.resultGroupId;
-          if (groupId) {
-            setTurnMetaById((meta) => ({
-              ...meta,
-              [groupId]: {
-                actionType: batch.actionType,
-                lastUserPrompt: batch.lastUserPrompt,
-                suggestions: batch.suggestions,
-              },
-            }));
-          }
-        }
-
-        if (!complete || !renderedInHistory) {
-          next.push(batch);
-        }
-      }
-
-      return next;
-    });
-  }, [generatedImages, state.messages, state.tasks]);
   const uploadedImages = state.images.filter((image) => image.type === 'uploaded');
   const recentPrompts = state.messages
     .filter((message) => message.role === 'user')
     .slice(-8)
     .reverse();
-  const activeTasks = state.tasks.filter((task) => ['pending', 'running'].includes(task.status));
-  const isGenerationLocked = useMemo(
-    () =>
-      isConversationGenerating({
-        isMutationPending: generationMutation.isPending,
-        tasks: state.tasks,
-        items: conversationItems,
-      }),
-    [conversationItems, generationMutation.isPending, state.tasks],
-  );
-
-  const assertGenerationIdle = () => {
-    if (isGenerationLocked) {
-      Message.warning(GENERATION_BUSY_MESSAGE);
-      return false;
-    }
-    return true;
-  };
-
-  const buildGenerationRequest = (
-    effectivePrompt: string,
-    imageIds: string[],
-    batchId: string,
-    taskCount: number,
-    selectedImageId?: string,
-  ): GenerationRequest => ({
-    prompt: effectivePrompt,
-    imageIds,
-    selectedImageId: imageIds.length ? undefined : selectedImageId ?? state.selectedImageId,
-    batchId,
-    taskCount,
-  });
 
   const handleSend = async (
     value: string,
     context: { attachments: ComposerAttachment[] },
   ) => {
-    if (!assertGenerationIdle()) return;
-
-    const trimmed = value.trim();
-    if (!trimmed) {
-      Message.warning('请输入创作指令');
-      return;
-    }
-
-    state.setSelectedImageId(undefined);
-
-    const batchId = `batch-${Date.now()}`;
-    beginOptimisticBatch({
-      batchId,
-      prompt: trimmed,
-      taskCount: count,
-    });
-
-    state.addMessage({
-      id: `optimistic-${Date.now()}`,
-      role: 'user',
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-    });
-
-    const imageIds: string[] = [];
-    for (const attachment of context.attachments) {
-      if (attachment.status !== 'ready') continue;
-      const result: UploadImageResponse = await client.uploadImage(attachment.file, {
-        conversationId: state.conversationId || undefined,
-        userId: props.userId,
-      });
-      state.addImages([result.image]);
-      imageIds.push(result.imageId);
-    }
-
-    if (imageIds.length > 0) {
-      state.setTasks(
-        state.tasks.map((task) =>
-          task.resultGroupId === batchId
-            ? { ...task, inputImageIds: imageIds, taskType: 'text_image_to_image' }
-            : task,
-        ),
-      );
-    }
-
     try {
-      await generationMutation.mutateAsync(
-        buildGenerationRequest(trimmed, imageIds, batchId, count),
-      );
+      const submitted = await submit(value, context, count);
+      if (submitted) {
+        setComposerSeed((seed) => ({ key: seed.key + 1, text: '' }));
+      }
     } catch {
-      // mutation onError handles rollback
+      // Controller handles user-facing errors.
     }
   };
 
   const handleTurnContinueEdit = (turnPrompt: string) => {
-    if (!assertGenerationIdle()) return;
-
-    const trimmed = turnPrompt.trim();
-    if (!trimmed) {
-      Message.warning('未找到该轮提示词');
-      return;
-    }
-
-    setComposerSeed((seed) => ({ key: seed.key + 1, text: trimmed }));
-    Message.info('已将提示词填入输入框，可继续编辑');
+    const nextPrompt = continueEdit(turnPrompt);
+    if (!nextPrompt) return;
+    setComposerSeed((seed) => ({ key: seed.key + 1, text: nextPrompt }));
   };
 
   const handleTurnRegenerate = async (turnPrompt: string, taskCount: number) => {
-    if (!assertGenerationIdle()) return;
-
-    const trimmed = turnPrompt.trim();
-    if (!trimmed) {
-      Message.warning('未找到该轮提示词');
-      return;
-    }
-
-    const batchId = `batch-${Date.now()}`;
-    beginOptimisticBatch({
-      batchId,
-      prompt: '重新生成',
-      taskCount,
-      actionType: 'regenerate',
-      lastUserPrompt: trimmed,
-    });
-
-    state.addMessage({
-      id: `optimistic-${Date.now()}`,
-      role: 'user',
-      content: '重新生成',
-      createdAt: new Date().toISOString(),
-    });
-
     try {
-      await generationMutation.mutateAsync({
-        prompt: '重新生成',
-        imageIds: [],
-        batchId,
-        taskCount,
-        regenerateFromPrompt: trimmed,
-      });
+      await regenerate(turnPrompt, taskCount);
     } catch {
-      rollbackOptimisticBatch(batchId);
+      // Controller handles rollback and messaging.
     }
   };
 
   const handleSuggestionSelect = (suggestion: string) => {
-    if (!assertGenerationIdle()) return;
-    setComposerSeed((seed) => ({ key: seed.key + 1, text: suggestion }));
-  };
-
-  const retryTask = async (taskId: string) => {
-    if (!assertGenerationIdle()) return;
-    try {
-      const task = await client.retryTask(taskId);
-      state.patchTask(taskId, task);
-    } catch (error) {
-      Message.error((error as Error).message);
-    }
+    const nextPrompt = acceptSuggestion(suggestion);
+    if (!nextPrompt) return;
+    setComposerSeed((seed) => ({ key: seed.key + 1, text: nextPrompt }));
   };
 
   const startNewConversation = () => {
-    state.reset(props.bizType, sceneType);
-    setActiveBatches([]);
-    setTurnMetaById({});
+    clearConversationSession(props.bizType);
+    sessionState.reload();
+    writeConversationIdToUrl(null);
+    batchesRestoredRef.current = false;
+    resetConversation(props.bizType, sceneType);
+    resetForNewConversation();
     setComposerSeed({ key: 0, text: '' });
     setTaskPanelOpen(false);
     setSidebarOpen(false);
@@ -528,7 +354,7 @@ function ImageComposerWorkspace(props: ImageComposerPageProps) {
     >
       <aside className="nova-composer__sidebar">
         <div className="nova-composer__sidebar-heading">
-          <strong>开启创作</strong>
+          <strong>开始创作</strong>
           <div>
             <Tooltip content={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'}>
               <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
@@ -552,7 +378,7 @@ function ImageComposerWorkspace(props: ImageComposerPageProps) {
         </button>
 
         <section className="nova-composer__recent">
-          <label className="nova-composer__section-label">最近</label>
+          <label className="nova-composer__section-label">最近创作</label>
           {recentPrompts.length === 0 ? (
             <div className="nova-composer__recent-empty">
               <MessageSquare size={15} />
@@ -570,10 +396,11 @@ function ImageComposerWorkspace(props: ImageComposerPageProps) {
                   className={index === 0 ? 'is-active' : ''}
                   disabled={isGenerationLocked}
                   onClick={() => {
-                    if (!assertGenerationIdle()) return;
+                    const nextPrompt = acceptSuggestion(message.content);
+                    if (!nextPrompt) return;
                     setComposerSeed((seed) => ({
                       key: seed.key + 1,
-                      text: message.content,
+                      text: nextPrompt,
                     }));
                   }}
                   title={message.content}
@@ -594,7 +421,9 @@ function ImageComposerWorkspace(props: ImageComposerPageProps) {
                 ? '实时连接正常'
                 : connectionStatus === 'connecting'
                   ? '连接中'
-                  : '正在重连'}
+                  : connectionStatus === 'error'
+                    ? '连接异常，正在自动重试'
+                    : '连接已断开，轮询同步中'}
           </span>
         </div>
       </aside>
@@ -621,6 +450,10 @@ function ImageComposerWorkspace(props: ImageComposerPageProps) {
         </header>
 
         <div className="nova-composer__canvas nova-composer__canvas--ai-studio">
+          <ConnectionStatusBanner
+            status={connectionStatus}
+            visible={showConnectionBanner}
+          />
           <AiStudioConversation
             key={composerSeed.key}
             theme={theme}
@@ -630,7 +463,7 @@ function ImageComposerWorkspace(props: ImageComposerPageProps) {
             maxImageResolution={maxImageResolution}
             count={count}
             defaultValue={composerSeed.text}
-            isSubmitting={generationMutation.isPending}
+            isSubmitting={isSubmitting}
             isInteractionLocked={isGenerationLocked}
             enableImageEdit={props.enableImageEdit}
             enableDownload={props.enableDownload}
@@ -736,3 +569,5 @@ export function ImageComposerPage(props: ImageComposerPageProps) {
     </NovaCanvasProvider>
   );
 }
+
+export const ImageComposer = ImageComposerPage;

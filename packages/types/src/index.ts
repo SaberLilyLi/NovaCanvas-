@@ -121,6 +121,7 @@ export interface CreateGenerationInput {
   userId?: string;
   bizType: BizType;
   sceneType?: string;
+  model?: string;
   prompt: string;
   imageIds?: string[];
   selectedImageId?: string;
@@ -138,6 +139,7 @@ export interface PromptSuggestion {
 export interface PromptSuggestionsInput {
   bizType: BizType;
   sceneType?: string;
+  model?: string;
   lastUserPrompt: string;
 }
 
