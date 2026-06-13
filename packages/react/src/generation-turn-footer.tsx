@@ -10,7 +10,7 @@ export interface GenerationTurnFooterProps {
   isGenerating?: boolean;
   isInteractionLocked?: boolean;
   enableImageEdit?: boolean;
-  onContinueEdit?: (turnPrompt: string) => void;
+  onContinueEdit?: () => void;
   onRegenerate?: (turnPrompt: string, slotCount: number) => void;
   onSuggestionSelect?: (prompt: string) => void;
 }
@@ -49,7 +49,7 @@ export function GenerationTurnFooter(props: GenerationTurnFooterProps) {
               type="button"
               className="nova-generation-turn-footer__button"
               disabled={disabled}
-              onClick={() => props.onContinueEdit?.(props.turnPrompt)}
+              onClick={() => props.onContinueEdit?.()}
             >
               <PenLine size={14} />
               重新编辑

@@ -3,6 +3,7 @@ import {
   type PropsWithChildren,
   useContext,
   useEffect,
+  useMemo,
   useRef,
 } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -35,20 +36,19 @@ export function NovaCanvasProvider({
   authToken,
 }: PropsWithChildren<NovaCanvasProviderProps>) {
   const queryClientRef = useRef(new QueryClient());
-  const clientRef = useRef(createNovaCanvasClient({ baseUrl, authToken }));
   const storeRef = useRef(createNovaCanvasStore(bizType, sceneType));
+  const client = useMemo(
+    () => createNovaCanvasClient({ baseUrl, authToken }),
+    [authToken, baseUrl],
+  );
 
   useEffect(() => {
     storeRef.current.getState().reset(bizType, sceneType);
   }, [bizType, sceneType]);
 
-  useEffect(() => {
-    clientRef.current = createNovaCanvasClient({ baseUrl, authToken });
-  }, [baseUrl, authToken]);
-
   return (
     <QueryClientProvider client={queryClientRef.current}>
-      <NovaCanvasContext.Provider value={{ client: clientRef.current, store: storeRef.current }}>
+      <NovaCanvasContext.Provider value={{ client, store: storeRef.current }}>
         {children}
       </NovaCanvasContext.Provider>
     </QueryClientProvider>

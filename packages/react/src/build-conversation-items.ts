@@ -1,10 +1,10 @@
-import type { Message } from '@company/ai-studio-sdk/types';
 import type {
   ConversationMessage,
   GeneratedImage,
   GenerationTask,
   PromptSuggestion,
 } from '@novacanvas/types';
+import type { ConversationViewMessage } from './conversation/types';
 import { IMAGE_OPTIMIZE_PROMPT } from './generation-image-actions';
 import {
   buildGenerationSlots,
@@ -214,28 +214,28 @@ function buildHistoryItems(
       }
 
       items.push({
-        type: 'sdk',
+        type: 'message',
         message: {
           id: message.id,
           role: 'user',
           content: message.content,
           createdAt: new Date(message.createdAt).getTime(),
           status: 'success',
-        } satisfies Message,
+        } satisfies ConversationViewMessage,
       });
       continue;
     }
 
     if (message.role === 'assistant' && message.content && !message.taskIds?.length) {
       items.push({
-        type: 'sdk',
+        type: 'message',
         message: {
           id: message.id,
           role: 'assistant',
           content: message.content,
           createdAt: new Date(message.createdAt).getTime(),
           status: 'success',
-        } satisfies Message,
+        } satisfies ConversationViewMessage,
       });
     }
   }
@@ -294,7 +294,11 @@ function mergeUserWithGenerationBatch(items: NovaConversationItem[]): NovaConver
     const current = items[index]!;
     const next = items[index + 1];
 
-    if (current.type === 'sdk' && current.message.role === 'user' && next?.type === 'generation-batch') {
+    if (
+      current.type === 'message' &&
+      current.message.role === 'user' &&
+      next?.type === 'generation-batch'
+    ) {
       const userMessage = current.message;
       const isGenerating = !isBatchComplete(next.slots);
       merged.push({

@@ -5,6 +5,7 @@ import type { GenerationImageActionHandler } from './generation-image-actions';
 export interface GenerationSlotActionsProps {
   image: GeneratedImage;
   turnPrompt: string;
+  resultGroupId?: string;
   enableImageEdit?: boolean;
   onContinueEdit?: GenerationImageActionHandler;
   onRegenerate?: GenerationImageActionHandler;
@@ -13,7 +14,11 @@ export interface GenerationSlotActionsProps {
 export function GenerationSlotActions(props: GenerationSlotActionsProps) {
   if (!props.onContinueEdit && !props.onRegenerate) return null;
 
-  const context = { turnPrompt: props.turnPrompt };
+  const context = {
+    turnPrompt: props.turnPrompt,
+    resultGroupId: props.resultGroupId,
+    imageIndex: props.image.imageIndex,
+  };
 
   return (
     <div className="nova-generation-actions">

@@ -1,6 +1,9 @@
 import { Image } from '@arco-design/web-react';
-import { AlertCircle } from 'lucide-react';
+import type { GeneratedImage } from '@novacanvas/types';
+import { AlertCircle, Check } from 'lucide-react';
+import type { GenerationImageActionHandler } from './generation-image-actions';
 import { GenerationLoadingMotion } from './generation-loading-motion';
+import { GenerationSlotActions } from './generation-slot-actions';
 import type { GenerationSlot } from './generation-slots';
 import { useImagePreviewProps } from './image-preview-download';
 
@@ -9,11 +12,25 @@ export interface GenerationSlotGridProps {
   isGenerating?: boolean;
   generationModel?: string;
   enableDownload?: boolean;
+  enableImageEdit?: boolean;
+  selectedImageId?: string;
+  turnPrompt: string;
+  resultGroupId?: string;
+  onSelectImage?: (image: GeneratedImage) => void;
+  onContinueEdit?: GenerationImageActionHandler;
+  onRegenerate?: GenerationImageActionHandler;
 }
 
 function GenerationSlotItem(props: {
   slot: GenerationSlot;
   enableDownload?: boolean;
+  enableImageEdit?: boolean;
+  selectedImageId?: string;
+  turnPrompt: string;
+  resultGroupId?: string;
+  onSelectImage?: (image: GeneratedImage) => void;
+  onContinueEdit?: GenerationImageActionHandler;
+  onRegenerate?: GenerationImageActionHandler;
 }) {
   const { slot, enableDownload } = props;
   const isFailed = slot.status === 'failed';
@@ -25,14 +42,31 @@ function GenerationSlotItem(props: {
   });
 
   if (!isFailed && isComplete) {
+    const selected = props.selectedImageId === slot.image!.id;
     return (
-      <div className="nova-generation-grid__result">
+      <div
+        className={`nova-generation-grid__result ${selected ? 'is-selected' : ''}`}
+        onClick={() => props.onSelectImage?.(slot.image!)}
+      >
         <Image
           className="nova-generation-grid__image"
           src={slot.image!.url}
           alt={`生成结果 ${slot.index}`}
           preview
           previewProps={previewProps}
+        />
+        {selected && (
+          <span className="nova-generation-grid__selected" aria-label="已选择">
+            <Check size={14} />
+          </span>
+        )}
+        <GenerationSlotActions
+          image={slot.image!}
+          turnPrompt={props.turnPrompt}
+          resultGroupId={props.resultGroupId}
+          enableImageEdit={props.enableImageEdit}
+          onContinueEdit={props.onContinueEdit}
+          onRegenerate={props.onRegenerate}
         />
       </div>
     );
@@ -81,7 +115,17 @@ export function GenerationSlotGrid(props: GenerationSlotGridProps) {
       >
         {props.slots.map((slot) => (
           <article className="nova-generation-grid__item" key={`slot-${slot.index}`}>
-            <GenerationSlotItem slot={slot} enableDownload={props.enableDownload} />
+            <GenerationSlotItem
+              slot={slot}
+              enableDownload={props.enableDownload}
+              enableImageEdit={props.enableImageEdit}
+              selectedImageId={props.selectedImageId}
+              turnPrompt={props.turnPrompt}
+              resultGroupId={props.resultGroupId}
+              onSelectImage={props.onSelectImage}
+              onContinueEdit={props.onContinueEdit}
+              onRegenerate={props.onRegenerate}
+            />
           </article>
         ))}
       </div>

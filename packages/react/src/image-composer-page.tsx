@@ -1,4 +1,3 @@
-import type { ComposerAttachment } from '@company/ai-studio-sdk/types';
 import { Progress, Tooltip } from '@arco-design/web-react';
 import { useQuery } from '@tanstack/react-query';
 import { getBizConfig } from '@novacanvas/biz-config';
@@ -22,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { AiStudioConversation } from './ai-studio-conversation';
+import type { ComposerSubmitContext } from './composer/types';
 import { ConnectionStatusBanner } from './connection-status-banner';
 import { clearConversationSession } from './conversation-session';
 import { readConversationIdFromUrl, writeConversationIdToUrl } from './conversation-url';
@@ -39,6 +38,8 @@ import {
   normalizeRatio,
   type ImageSizeSettings,
 } from './image-size-settings';
+import type { GenerationImageActionContext } from './generation-image-actions';
+import { NovaCanvasConversation } from './nova-canvas-conversation';
 import { NovaCanvasProvider, useNovaCanvas, useNovaCanvasClient } from './provider';
 import './styles.scss';
 
@@ -318,22 +319,24 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
       { label: 'Chat Image 2', value: 'gpt-image-2' },
     ];
 
-  const handleSend = async (
-    value: string,
-    context: { attachments: ComposerAttachment[] },
-  ) => {
+  const handleSend = async (value: string, context: ComposerSubmitContext) => {
     try {
       const submitted = await submit(value, context, count);
       if (submitted) {
         setComposerSeed((seed) => ({ key: seed.key + 1, text: '' }));
       }
+      return submitted;
     } catch {
       // Controller handles user-facing errors.
+      return false;
     }
   };
 
-  const handleTurnContinueEdit = (turnPrompt: string) => {
-    const nextPrompt = continueEdit(turnPrompt);
+  const handleImageContinueEdit = (
+    image: GeneratedImage,
+    context: GenerationImageActionContext,
+  ) => {
+    const nextPrompt = continueEdit({ image, turnPrompt: context.turnPrompt });
     if (!nextPrompt) return;
     setComposerSeed((seed) => ({ key: seed.key + 1, text: nextPrompt }));
   };
@@ -472,7 +475,7 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
             status={connectionStatus}
             visible={showConnectionBanner}
           />
-          <AiStudioConversation
+          <NovaCanvasConversation
             composerKey={composerSeed.key}
             theme={theme}
             isEmpty={conversationItems.length === 0}
@@ -484,15 +487,19 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
             generationModel={selectedGenerationModel}
             generationModelOptions={generationModelOptions}
             enableModelSelector={props.enableModelSelector}
+            enableUpload={props.enableUpload}
+            enableMultiImage={props.enableMultiImage}
             defaultValue={composerSeed.text}
             isSubmitting={isSubmitting}
             isInteractionLocked={isGenerationLocked}
+            selectedImageId={state.selectedImageId}
             enableImageEdit={props.enableImageEdit}
             enableDownload={props.enableDownload}
             onImageSizeSettingsChange={setImageSizeSettings}
             onCountChange={setCount}
             onGenerationModelChange={setSelectedGenerationModel}
-            onTurnContinueEdit={handleTurnContinueEdit}
+            onSelectImage={(image) => state.setSelectedImageId(image.id)}
+            onImageContinueEdit={handleImageContinueEdit}
             onTurnRegenerate={handleTurnRegenerate}
             onSuggestionSelect={handleSuggestionSelect}
             loadingSuggestionTurnIds={loadingTurnIds}

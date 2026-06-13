@@ -1,5 +1,6 @@
-import type { Message } from '@company/ai-studio-sdk/types';
 import type { GeneratedImage, PromptSuggestion } from '@novacanvas/types';
+import type { ConversationViewMessage } from './conversation/types';
+import type { GenerationImageActionHandler } from './generation-image-actions';
 import { GenerationSlotGrid } from './generation-slot-grid';
 import { GenerationTurnCard } from './generation-turn-card';
 import { GenerationTurnFooter } from './generation-turn-footer';
@@ -7,7 +8,7 @@ import type { ResolutionTier } from './image-size-settings';
 import type { GenerationSlot } from './generation-slots';
 
 export type NovaConversationItem =
-  | { type: 'sdk'; message: Message }
+  | { type: 'message'; message: ConversationViewMessage }
   | {
       type: 'generation-turn';
       id: string;
@@ -41,7 +42,9 @@ export interface NovaConversationViewProps {
   enableDownload?: boolean;
   loadingSuggestionTurnIds?: string[];
   isInteractionLocked?: boolean;
-  onTurnContinueEdit?: (turnPrompt: string) => void;
+  selectedImageId?: string;
+  onSelectImage?: (image: GeneratedImage) => void;
+  onImageContinueEdit?: GenerationImageActionHandler;
   onTurnRegenerate?: (turnPrompt: string, slotCount: number) => void;
   onSuggestionSelect?: (prompt: string) => void;
 }
@@ -52,7 +55,7 @@ function resolveActionLabel(actionType?: 'regenerate' | 'refine' | 'create'): st
   return undefined;
 }
 
-function SdkMessageBubble({ message }: { message: Message }) {
+function ConversationMessageBubble({ message }: { message: ConversationViewMessage }) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
 
@@ -91,7 +94,9 @@ function GenerationTurnView(props: {
   enableDownload?: boolean;
   loadingSuggestions?: boolean;
   isInteractionLocked?: boolean;
-  onTurnContinueEdit?: (turnPrompt: string) => void;
+  selectedImageId?: string;
+  onSelectImage?: (image: GeneratedImage) => void;
+  onImageContinueEdit?: GenerationImageActionHandler;
   onTurnRegenerate?: (turnPrompt: string, slotCount: number) => void;
   onSuggestionSelect?: (prompt: string) => void;
 }) {
@@ -104,6 +109,13 @@ function GenerationTurnView(props: {
     Boolean(props.loadingSuggestions) &&
     !item.suggestions?.length;
   const shouldShowCompletedFooter = hasCompletedImages && !shouldHoldCompletedContent;
+  const completedImages =
+    item.slots?.flatMap((slot) => (slot.image ? [slot.image] : [])) ?? [];
+  const selectedImage = completedImages.find(
+    (image) => image.id === props.selectedImageId,
+  );
+  const footerEditImage =
+    completedImages.length === 1 ? completedImages[0] : selectedImage;
 
   return (
     <GenerationTurnCard
@@ -121,7 +133,16 @@ function GenerationTurnView(props: {
             isGenerating={item.isGenerating}
             isInteractionLocked={props.isInteractionLocked}
             enableImageEdit={props.enableImageEdit}
-            onContinueEdit={props.onTurnContinueEdit}
+            onContinueEdit={
+              footerEditImage && props.onImageContinueEdit
+                ? () =>
+                    props.onImageContinueEdit?.(footerEditImage, {
+                      turnPrompt,
+                      resultGroupId: item.id,
+                      imageIndex: footerEditImage.imageIndex,
+                    })
+                : undefined
+            }
             onRegenerate={props.onTurnRegenerate}
             onSuggestionSelect={props.onSuggestionSelect}
           />
@@ -140,6 +161,12 @@ function GenerationTurnView(props: {
           isGenerating={item.isGenerating}
           generationModel={item.generationModel}
           enableDownload={props.enableDownload}
+          enableImageEdit={props.enableImageEdit}
+          selectedImageId={props.selectedImageId}
+          turnPrompt={turnPrompt}
+          resultGroupId={item.id}
+          onSelectImage={props.onSelectImage}
+          onContinueEdit={props.onImageContinueEdit}
         />
       ) : null}
     </GenerationTurnCard>
@@ -161,19 +188,21 @@ export function NovaConversationView(props: NovaConversationViewProps) {
               enableDownload={props.enableDownload}
               loadingSuggestions={props.loadingSuggestionTurnIds?.includes(item.id)}
               isInteractionLocked={props.isInteractionLocked}
-              onTurnContinueEdit={props.onTurnContinueEdit}
+              selectedImageId={props.selectedImageId}
+              onSelectImage={props.onSelectImage}
+              onImageContinueEdit={props.onImageContinueEdit}
               onTurnRegenerate={props.onTurnRegenerate}
               onSuggestionSelect={props.onSuggestionSelect}
             />
           );
         }
 
-        if (item.type === 'sdk') {
+        if (item.type === 'message') {
           if (item.message.role === 'user') {
             return null;
           }
 
-          return <SdkMessageBubble key={item.message.id} message={item.message} />;
+          return <ConversationMessageBubble key={item.message.id} message={item.message} />;
         }
 
         return null;

@@ -9,7 +9,6 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@company/ai-studio-sdk": "workspace:*",
     "@arco-design/web-react": "^2.66.1",
     "@novacanvas/react": "workspace:*",
     "@novacanvas/sdk": "workspace:*",

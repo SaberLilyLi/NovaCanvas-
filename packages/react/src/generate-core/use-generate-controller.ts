@@ -1,10 +1,10 @@
-import type { ComposerAttachment } from '@company/ai-studio-sdk/types';
 import { Message } from '@arco-design/web-react';
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import type { UploadImageResponse } from '@novacanvas/sdk';
 import type { BizType, GeneratedImage } from '@novacanvas/types';
 import type { ActiveGenerationBatch } from '../build-conversation-items';
+import type { ComposerSubmitContext } from '../composer/types';
 import { GENERATION_BUSY_MESSAGE, isConversationGenerating } from '../generation-lock';
 import { settingsToImageSize, type ImageSizeSettings } from '../image-size-settings';
 import type { NovaConversationItem } from '../nova-conversation-view';
@@ -257,7 +257,7 @@ export function useGenerateController(options: UseGenerateControllerOptions) {
 
   const submit = useCallback(async (
     prompt: string,
-    context: { attachments: ComposerAttachment[] },
+    context: ComposerSubmitContext,
     taskCount: number,
   ) => {
     if (!ensureIdle()) return false;
@@ -268,7 +268,7 @@ export function useGenerateController(options: UseGenerateControllerOptions) {
       return false;
     }
 
-    state.setSelectedImageId(undefined);
+    const selectedImageIdAtSubmit = state.selectedImageId;
 
     const batchId = `batch-${Date.now()}`;
     createOptimisticBatch({
@@ -304,10 +304,11 @@ export function useGenerateController(options: UseGenerateControllerOptions) {
     await mutation.mutateAsync({
       prompt: trimmed,
       imageIds,
-      selectedImageId: imageIds.length ? undefined : state.selectedImageId,
+      selectedImageId: imageIds.length ? undefined : selectedImageIdAtSubmit,
       batchId,
       taskCount,
     });
+    state.setSelectedImageId(undefined);
 
     return true;
   }, [
@@ -320,18 +321,22 @@ export function useGenerateController(options: UseGenerateControllerOptions) {
     state,
   ]);
 
-  const continueEdit = useCallback((turnPrompt: string) => {
+  const continueEdit = useCallback((input: {
+    image: GeneratedImage;
+    turnPrompt: string;
+  }) => {
     if (!ensureIdle()) return null;
 
-    const trimmed = turnPrompt.trim();
+    const trimmed = input.turnPrompt.trim();
     if (!trimmed) {
       Message.warning('未找到该轮提示词');
       return null;
     }
 
     Message.info('已将提示词填入输入框，可继续编辑');
+    state.setSelectedImageId(input.image.id);
     return trimmed;
-  }, [ensureIdle]);
+  }, [ensureIdle, state]);
 
   const regenerate = useCallback(async (turnPrompt: string, taskCount: number) => {
     if (!ensureIdle()) return false;

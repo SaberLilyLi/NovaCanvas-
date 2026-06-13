@@ -5,6 +5,8 @@ export const IMAGE_OPTIMIZE_PROMPT =
 
 export interface GenerationImageActionContext {
   turnPrompt: string;
+  resultGroupId?: string;
+  imageIndex?: number;
 }
 
 export type GenerationImageActionHandler = (

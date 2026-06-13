@@ -4,12 +4,18 @@ export {
   ImageComposerPage,
   ImageComposerWorkspace,
   ComposerInput,
+  NovaComposerInput,
   MessageList,
   type ImageComposerSharedProps,
   type NovaCanvasComposerProps,
   type ImageComposerPageProps,
   type ImageComposerWorkspaceProps,
   type ComposerInputProps,
+  type NovaComposerInputProps,
+  type ComposerAttachment,
+  type ComposerAttachmentStatus,
+  type ComposerReferenceAttachment,
+  type ComposerSubmitContext,
   type MessageListProps,
 } from './composer';
 export {

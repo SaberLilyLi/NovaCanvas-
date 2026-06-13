@@ -1,0 +1,2 @@
+G:\NovaCanvas-\.codex-logs\server-20260614-000832.stdout.log
+G:\NovaCanvas-\.codex-logs\server-20260614-000832.stderr.log

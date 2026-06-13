@@ -1,8 +1,11 @@
-import { useRef } from 'react';
-import { Input, Select, Spin } from '@arco-design/web-react';
-import { ArrowUp, Plus, X } from 'lucide-react';
-import { getBizConfig } from '@novacanvas/biz-config';
+import { useMemo } from 'react';
 import type { BizType, ImageSize, UploadedImage } from '@novacanvas/types';
+import {
+  createDefaultImageSizeSettings,
+  normalizeRatio,
+} from './image-size-settings';
+import { NovaComposerInput } from './composer/nova-composer-input';
+import type { ComposerReferenceAttachment } from './composer/types';
 
 export interface ComposerInputProps {
   bizType: BizType;
@@ -26,100 +29,45 @@ export interface ComposerInputProps {
   ratioToSize: (ratio: string) => ImageSize;
 }
 
+/**
+ * @deprecated Use NovaComposerInput. This wrapper is retained for one migration cycle.
+ */
 export function ComposerInput(props: ComposerInputProps) {
-  const config = getBizConfig(props.bizType);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageSizeSettings = useMemo(
+    () => createDefaultImageSizeSettings(normalizeRatio(props.ratio)),
+    [props.ratio],
+  );
+  const references = useMemo<ComposerReferenceAttachment[]>(
+    () =>
+      props.selectedImageIds.flatMap((id) => {
+        const image = props.images.find((item) => item.id === id);
+        return image
+          ? [{ id, name: image.name ?? 'Reference image', previewUrl: image.url }]
+          : [];
+      }),
+    [props.images, props.selectedImageIds],
+  );
 
   return (
-    <div className="nova-composer__input-shell">
-      <div className="nova-composer__input-body">
-        {props.enableUpload !== false && (
-          <div className="nova-composer__input-attachments">
-            {props.selectedImageIds.map((id) => {
-              const image = props.images.find((item) => item.id === id);
-              return image ? (
-                <div className="nova-composer__attachment-thumb" key={id}>
-                  <img src={image.url} alt="Reference" />
-                  <button type="button" onClick={() => props.onRemoveReference(id)} aria-label="移除参考图">
-                    <X size={12} />
-                  </button>
-                </div>
-              ) : null;
-            })}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple={props.enableMultiImage !== false}
-              hidden
-              onChange={(event) => {
-                Array.from(event.target.files ?? []).forEach((file) => props.onUpload(file));
-                event.target.value = '';
-              }}
-            />
-            <button
-              className="nova-composer__upload-slot"
-              type="button"
-              disabled={props.isUploading}
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="上传参考图"
-            >
-              {props.isUploading ? <Spin size={18} /> : <Plus size={20} strokeWidth={1.75} />}
-            </button>
-          </div>
-        )}
-        <Input.TextArea
-          className="nova-composer__textarea"
-          value={props.prompt}
-          onChange={props.onPromptChange}
-          autoSize={{ minRows: 2, maxRows: 6 }}
-          placeholder="输入想法或上传参考，描述你想生成或继续修改的画面..."
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              props.onSubmit();
-            }
-          }}
-        />
-      </div>
-      <div className="nova-composer__toolbar">
-        <div className="nova-composer__toolbar-pills">
-          <Select
-            value={props.ratio}
-            onChange={props.onRatioChange}
-            size="small"
-            className="nova-composer__pill-select"
-            triggerProps={{ autoAlignPopupWidth: false }}
-          >
-            {config.defaultRatioOptions.map((item) => (
-              <Select.Option value={item} key={item}>
-                {item}
-              </Select.Option>
-            ))}
-          </Select>
-          <Select
-            value={props.count}
-            onChange={props.onCountChange}
-            size="small"
-            className="nova-composer__pill-select nova-composer__pill-select--count"
-          >
-            {[1, 2, 3, 4].map((item) => (
-              <Select.Option value={item} key={item}>
-                {item} 张
-              </Select.Option>
-            ))}
-          </Select>
-        </div>
-        <button
-          className="nova-composer__send-button"
-          type="button"
-          disabled={props.isSubmitting || !props.prompt.trim()}
-          onClick={props.onSubmit}
-          aria-label="生成"
-        >
-          {props.isSubmitting ? <Spin size={16} /> : <ArrowUp size={18} strokeWidth={2.25} />}
-        </button>
-      </div>
-    </div>
+    <NovaComposerInput
+      value={props.prompt}
+      disabled={props.isUploading}
+      submitting={props.isSubmitting}
+      enableUpload={props.enableUpload}
+      enableMultiImage={props.enableMultiImage}
+      imageSizeSettings={imageSizeSettings}
+      count={props.count}
+      referenceAttachments={references}
+      onRemoveReference={props.onRemoveReference}
+      onValueChange={props.onPromptChange}
+      onImageSizeSettingsChange={(settings) => props.onRatioChange(settings.ratio)}
+      onCountChange={props.onCountChange}
+      onSubmit={async (_value, context) => {
+        for (const attachment of context.attachments) {
+          await Promise.resolve(props.onUpload(attachment.file));
+        }
+        props.onSubmit();
+      }}
+    />
   );
 }
