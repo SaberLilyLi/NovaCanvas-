@@ -19,8 +19,7 @@ export function GenerationTurnFooter(props: GenerationTurnFooterProps) {
   if (props.isGenerating) return null;
 
   const disabled = Boolean(props.isInteractionLocked);
-  const showSuggestions =
-    props.loadingSuggestions || Boolean(props.suggestions?.length);
+  const showSuggestions = Boolean(props.suggestions?.length);
   const showActions = props.onContinueEdit || props.onRegenerate;
 
   if (!showSuggestions && !showActions) return null;
@@ -36,17 +35,11 @@ export function GenerationTurnFooter(props: GenerationTurnFooterProps) {
     >
       {showSuggestions && (
         <div className="nova-generation-turn-footer__suggestions">
-          {props.loadingSuggestions && !props.suggestions?.length ? (
-            <span className="nova-generation-turn-footer__loading">
-              正在生成改写建议...
-            </span>
-          ) : (
-            <GenerationSuggestionsBar
-              suggestions={props.suggestions ?? []}
-              disabled={disabled}
-              onSelect={(prompt) => props.onSuggestionSelect?.(prompt)}
-            />
-          )}
+          <GenerationSuggestionsBar
+            suggestions={props.suggestions ?? []}
+            disabled={disabled}
+            onSelect={(prompt) => props.onSuggestionSelect?.(prompt)}
+          />
         </div>
       )}
       {showActions && (

@@ -30,6 +30,7 @@ export {
   normalizeImageSize,
   parseImageResolutionCap,
   parseImageSize,
+  maxImageResolutionCap,
   resolveImageDimensions,
   roundToImageGrid,
 } from './image-size.js';

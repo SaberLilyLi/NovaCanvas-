@@ -25,6 +25,7 @@ export interface ActiveGenerationBatch {
   id: string;
   taskIds: string[];
   prompt: string;
+  generationModel?: string;
   ratioLabel?: string;
   resolution?: ResolutionTier;
   actionType?: 'regenerate' | 'refine' | 'create';
@@ -194,6 +195,7 @@ function buildHistoryItems(
           type: 'generation-turn',
           id: groupId,
           prompt,
+          generationModel: undefined,
           ratioLabel: meta.ratioLabel,
           resolution: meta.resolution,
           slots: buildSlotsForResultGroup(groupId, groupImages, tasks, images),
@@ -299,6 +301,7 @@ function mergeUserWithGenerationBatch(items: NovaConversationItem[]): NovaConver
         type: 'generation-turn',
         id: next.batchId,
         prompt: next.lastUserPrompt || next.prompt || userMessage.content,
+        generationModel: next.generationModel,
         ratioLabel: next.ratioLabel,
         resolution: next.resolution,
         slots: next.slots,
@@ -347,6 +350,7 @@ export function buildConversationItems(
       type: 'generation-batch',
       batchId: batch.id,
       prompt: batch.lastUserPrompt || batch.prompt,
+      generationModel: batch.generationModel,
       ratioLabel: batch.ratioLabel ?? input.ratioLabel,
       resolution: batch.resolution ?? input.resolution,
       slots,
@@ -365,6 +369,7 @@ export function buildConversationItems(
       type: 'generation-turn' as const,
       id: item.batchId,
       prompt: item.prompt,
+      generationModel: item.generationModel,
       ratioLabel: item.ratioLabel,
       resolution: item.resolution,
       slots: item.slots,

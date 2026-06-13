@@ -215,6 +215,7 @@ export function useGenerateController(options: UseGenerateControllerOptions) {
     batchId: string;
     prompt: string;
     taskCount: number;
+    generationModel?: string;
     inputImageIds?: string[];
     actionType?: ActiveGenerationBatch['actionType'];
     lastUserPrompt?: string;
@@ -230,6 +231,7 @@ export function useGenerateController(options: UseGenerateControllerOptions) {
 
     viewModel.addOptimisticBatch({
       ...optimistic.batch,
+      generationModel: input.generationModel,
       actionType: input.actionType,
       lastUserPrompt: input.lastUserPrompt,
     });
@@ -273,6 +275,7 @@ export function useGenerateController(options: UseGenerateControllerOptions) {
       batchId,
       prompt: trimmed,
       taskCount,
+      generationModel: options.model,
     });
 
     state.addMessage({

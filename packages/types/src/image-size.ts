@@ -110,6 +110,19 @@ export function parseImageResolutionCap(value?: string | null): ImageResolutionC
   return '1k';
 }
 
+const IMAGE_RESOLUTION_CAP_RANK: Record<ImageResolutionCap, number> = {
+  '1k': 1,
+  '2k': 2,
+  '4k': 3,
+};
+
+export function maxImageResolutionCap(...caps: ImageResolutionCap[]): ImageResolutionCap {
+  return caps.reduce(
+    (best, cap) => (IMAGE_RESOLUTION_CAP_RANK[cap] > IMAGE_RESOLUTION_CAP_RANK[best] ? cap : best),
+    '1k',
+  );
+}
+
 export function capImageDimensions(
   width: number,
   height: number,

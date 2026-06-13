@@ -36,6 +36,7 @@ interface GenerationJobData {
   conversationId: string;
   bizType: BizType;
   sceneType?: string;
+  model?: string;
   taskType: TaskType;
   prompt: string;
   inputImageIds: string[];
@@ -201,6 +202,7 @@ export class GenerationService implements OnModuleInit, OnModuleDestroy {
         conversationId,
         bizType: input.bizType,
         sceneType: input.sceneType,
+        model: input.model,
         taskType: plan.taskType,
         prompt: planned.prompt,
         inputImageIds: planned.inputImageIds,
@@ -337,6 +339,7 @@ export class GenerationService implements OnModuleInit, OnModuleDestroy {
       prompt: payload.prompt,
       size: outputSize,
       bizType: payload.bizType,
+      model: payload.model,
       referenceUrls,
       taskType: payload.taskType,
     });

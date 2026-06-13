@@ -3,28 +3,19 @@ import { AlertCircle } from 'lucide-react';
 import { GenerationLoadingMotion } from './generation-loading-motion';
 import type { GenerationSlot } from './generation-slots';
 import { useImagePreviewProps } from './image-preview-download';
-import {
-  formatGenerationProgressLabel,
-  useFakeGenerationProgress,
-} from './use-fake-generation-progress';
 
 export interface GenerationSlotGridProps {
   slots: GenerationSlot[];
   isGenerating?: boolean;
+  generationModel?: string;
   enableDownload?: boolean;
-}
-
-function isSlotTerminal(slot: GenerationSlot): boolean {
-  return Boolean(slot.image) || slot.status === 'failed';
 }
 
 function GenerationSlotItem(props: {
   slot: GenerationSlot;
-  showProgressBadge?: boolean;
-  progress?: number;
   enableDownload?: boolean;
 }) {
-  const { slot, showProgressBadge, progress = 0, enableDownload } = props;
+  const { slot, enableDownload } = props;
   const isFailed = slot.status === 'failed';
   const isComplete = Boolean(slot.image);
   const previewProps = useImagePreviewProps({
@@ -63,31 +54,13 @@ function GenerationSlotItem(props: {
         seed={`${slot.taskId}:${slot.index}`}
         className="nova-generation-loading-motion--slot"
       />
-      {showProgressBadge && (
-        <span className="nova-generation-placeholder__badge">
-          {formatGenerationProgressLabel(progress)}
-        </span>
-      )}
     </div>
   );
 }
 
 export function GenerationSlotGrid(props: GenerationSlotGridProps) {
   const isSingle = props.slots.length === 1;
-  const batchMode = props.slots.length > 1;
   const columnCount = Math.min(props.slots.length, 4);
-  const firstSlot = props.slots[0];
-  const allTerminal = props.slots.every(isSlotTerminal);
-  const batchKey = props.slots.map((slot) => slot.taskId).join(':');
-  const progressComplete = batchMode ? allTerminal : Boolean(firstSlot?.image);
-  const progressEnabled =
-    Boolean(props.isGenerating) &&
-    props.slots.length > 0 &&
-    props.slots.some((slot) => slot.status !== 'failed');
-
-  const { progress } = useFakeGenerationProgress(batchKey, progressComplete, progressEnabled);
-  const showBatchProgressBadge =
-    batchMode && Boolean(props.isGenerating) && !allTerminal;
 
   return (
     <section
@@ -106,19 +79,9 @@ export function GenerationSlotGrid(props: GenerationSlotGridProps) {
             : undefined
         }
       >
-        {showBatchProgressBadge && (
-          <span className="nova-generation-grid__progress-badge">
-            {formatGenerationProgressLabel(progress)}
-          </span>
-        )}
-        {props.slots.map((slot, index) => (
+        {props.slots.map((slot) => (
           <article className="nova-generation-grid__item" key={`slot-${slot.index}`}>
-            <GenerationSlotItem
-              slot={slot}
-              showProgressBadge={!batchMode && index === 0}
-              progress={progress}
-              enableDownload={props.enableDownload}
-            />
+            <GenerationSlotItem slot={slot} enableDownload={props.enableDownload} />
           </article>
         ))}
       </div>

@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
-const COMPACT_ENTER_PX = 72;
-const COMPACT_EXIT_PX = 20;
+const BOTTOM_EPSILON_PX = 24;
+const ACTIVE_TURN_ENTER_OFFSET_PX = 280;
+const ACTIVE_TURN_EXIT_OFFSET_PX = 420;
 const STATE_LOCK_MS = 420;
 
 function getDistanceFromBottom(element: HTMLElement): number {
   return element.scrollHeight - element.scrollTop - element.clientHeight;
+}
+
+function getLatestGenerationTurn(element: HTMLElement): HTMLElement | null {
+  const turns = element.querySelectorAll<HTMLElement>('.nova-generation-turn');
+  return turns.length > 0 ? turns[turns.length - 1] ?? null : null;
 }
 
 export function useComposerCompact(
@@ -32,13 +38,39 @@ export function useComposerCompact(
       if (locked || Date.now() < lockUntilRef.current) return;
 
       const distance = getDistanceFromBottom(element);
-      if (!compactRef.current && distance > COMPACT_ENTER_PX) {
+      if (distance <= BOTTOM_EPSILON_PX) {
+        if (compactRef.current) {
+          compactRef.current = false;
+          lockUntilRef.current = Date.now() + STATE_LOCK_MS;
+          setIsCompact(false);
+        }
+        return;
+      }
+
+      const latestTurn = getLatestGenerationTurn(element);
+      if (!latestTurn) {
+        if (compactRef.current) {
+          compactRef.current = false;
+          lockUntilRef.current = Date.now() + STATE_LOCK_MS;
+          setIsCompact(false);
+        }
+        return;
+      }
+
+      const containerRect = element.getBoundingClientRect();
+      const latestTurnRect = latestTurn.getBoundingClientRect();
+      const latestTurnBottomInContainer = latestTurnRect.bottom - containerRect.top;
+      const enterThreshold = containerRect.height - ACTIVE_TURN_ENTER_OFFSET_PX;
+      const exitThreshold = containerRect.height - ACTIVE_TURN_EXIT_OFFSET_PX;
+
+      if (!compactRef.current && latestTurnBottomInContainer >= enterThreshold) {
         compactRef.current = true;
         lockUntilRef.current = Date.now() + STATE_LOCK_MS;
         setIsCompact(true);
         return;
       }
-      if (compactRef.current && distance < COMPACT_EXIT_PX) {
+
+      if (compactRef.current && latestTurnBottomInContainer <= exitThreshold) {
         compactRef.current = false;
         lockUntilRef.current = Date.now() + STATE_LOCK_MS;
         setIsCompact(false);
@@ -50,11 +82,18 @@ export function useComposerCompact(
       frameRef.current = requestAnimationFrame(updateCompact);
     };
 
+    const resizeObserver = new ResizeObserver(() => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = requestAnimationFrame(updateCompact);
+    });
+
     updateCompact();
     element.addEventListener('scroll', onScroll, { passive: true });
+    resizeObserver.observe(element);
 
     return () => {
       element.removeEventListener('scroll', onScroll);
+      resizeObserver.disconnect();
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
   }, [enabled, locked, messagesRef]);

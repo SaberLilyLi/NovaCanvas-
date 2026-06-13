@@ -43,6 +43,11 @@ import { NovaCanvasProvider, useNovaCanvas, useNovaCanvasClient } from './provid
 import './styles.scss';
 
 export interface ImageComposerSharedProps {
+  enableModelSelector?: boolean;
+  availableGenerationModels?: Array<{
+    label: string;
+    value: string;
+  }>;
   runtimeConfig?: {
     provider?: GenerateTransportType;
     models?: {
@@ -112,6 +117,9 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
   });
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedGenerationModel, setSelectedGenerationModel] = useState<string | undefined>(
+    () => runtimeConfig.generationModel,
+  );
   const batchesRestoredRef = useRef(false);
 
   const healthQuery = useQuery({
@@ -125,6 +133,10 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
   useEffect(() => {
     setImageSizeSettings((current) => clampSettingsToMaxResolution(current, maxImageResolution));
   }, [maxImageResolution]);
+
+  useEffect(() => {
+    setSelectedGenerationModel(runtimeConfig.generationModel);
+  }, [runtimeConfig.generationModel]);
 
   const conversationQuery = useQuery({
     queryKey: ['novacanvas-conversation', state.conversationId],
@@ -143,7 +155,7 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
     sceneType,
     userId: props.userId,
     metadata: props.metadata,
-    model: runtimeConfig.generationModel,
+    model: selectedGenerationModel,
     provider: runtimeConfig.provider,
     imageSizeSettings,
     conversationItems: [],
@@ -299,6 +311,12 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
     .filter((message) => message.role === 'user')
     .slice(-8)
     .reverse();
+  const generationModelOptions =
+    props.availableGenerationModels ?? [
+      { label: 'Seedream 4.0', value: 'doubao-seedream-4-0' },
+      { label: 'Seedream 4.5', value: 'doubao-seedream-4-5' },
+      { label: 'Chat Image 2', value: 'gpt-image-2' },
+    ];
 
   const handleSend = async (
     value: string,
@@ -455,13 +473,17 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
             visible={showConnectionBanner}
           />
           <AiStudioConversation
-            key={composerSeed.key}
+            composerKey={composerSeed.key}
             theme={theme}
             isEmpty={conversationItems.length === 0}
             items={conversationItems}
             imageSizeSettings={imageSizeSettings}
             maxImageResolution={maxImageResolution}
             count={count}
+            creditCostPerImage={1}
+            generationModel={selectedGenerationModel}
+            generationModelOptions={generationModelOptions}
+            enableModelSelector={props.enableModelSelector}
             defaultValue={composerSeed.text}
             isSubmitting={isSubmitting}
             isInteractionLocked={isGenerationLocked}
@@ -469,6 +491,7 @@ export function ImageComposerWorkspace(props: ImageComposerWorkspaceProps) {
             enableDownload={props.enableDownload}
             onImageSizeSettingsChange={setImageSizeSettings}
             onCountChange={setCount}
+            onGenerationModelChange={setSelectedGenerationModel}
             onTurnContinueEdit={handleTurnContinueEdit}
             onTurnRegenerate={handleTurnRegenerate}
             onSuggestionSelect={handleSuggestionSelect}

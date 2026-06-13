@@ -11,12 +11,24 @@ interface GenerateImageInput {
   prompt: string;
   size: ImageSize;
   bizType: BizType;
+  model?: string;
   referenceUrls: string[];
   taskType?: TaskType;
 }
 
 const escapeXml = (value: string) =>
   value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+const DOUBAO_IMAGE_MODEL_ALIASES: Record<string, string> = {
+  'doubao-seedream-3-0': 'doubao-seedream-3-0-250415',
+  'doubao-seedream-3.0': 'doubao-seedream-3-0-250415',
+  'doubao-seedream-4-0': 'doubao-seedream-4-0-250828',
+  'doubao-seedream-4.0': 'doubao-seedream-4-0-250828',
+  'doubao-seedream-4-5': 'doubao-seedream-4-5-251128',
+  'doubao-seedream-4.5': 'doubao-seedream-4-5-251128',
+  'doubao-seedream-4-7': 'doubao-seedream-4-7-250923',
+  'doubao-seedream-4.7': 'doubao-seedream-4-7-250923',
+};
 
 @Injectable()
 export class ImageModelService {
@@ -26,12 +38,14 @@ export class ImageModelService {
       input.referenceUrls.length === 0
     ) {
       throw new BadRequestException(
-        `${input.taskType} 必须携带参考图，不允许降级为 text_to_image`,
+        `${input.taskType} requires at least one reference image and cannot fallback to text_to_image`,
       );
     }
+
     if ((process.env.NOVACANVAS_RUNTIME ?? 'mock') === 'live') {
-      return this.generateWithGptImage(input);
+      return this.generateWithProvider(input);
     }
+
     return this.generateMock(input);
   }
 
@@ -70,10 +84,47 @@ export class ImageModelService {
     return Promise.resolve({ data: Buffer.from(svg), extension: '.svg' });
   }
 
-  private async generateWithGptImage(input: GenerateImageInput) {
+  private async generateWithProvider(input: GenerateImageInput) {
+    const selectedModel = this.resolveGenerationModel(input.model);
+
+    if (selectedModel.provider === 'doubao-seedream') {
+      return this.generateWithDoubaoSeedream(input, selectedModel.model);
+    }
+
+    return this.generateWithGptImage(input, selectedModel.model);
+  }
+
+  private resolveGenerationModel(requestedModel?: string) {
+    const normalized = requestedModel?.trim();
+    const defaultModel = (process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2').trim();
+
+    if (!normalized) {
+      return {
+        provider: 'openai' as const,
+        model: defaultModel,
+      };
+    }
+
+    if (/doubao|seedream/i.test(normalized)) {
+      const resolvedModel =
+        DOUBAO_IMAGE_MODEL_ALIASES[normalized.toLowerCase()] ?? normalized;
+
+      return {
+        provider: 'doubao-seedream' as const,
+        model: resolvedModel,
+      };
+    }
+
+    return {
+      provider: 'openai' as const,
+      model: normalized,
+    };
+  }
+
+  private async generateWithGptImage(input: GenerateImageInput, model: string) {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new ServiceUnavailableException('缺少 OPENAI_API_KEY');
-    const model = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2';
+    if (!apiKey) throw new ServiceUnavailableException('Missing OPENAI_API_KEY');
+
     const baseUrl = (process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '');
     const maxResolution = parseImageResolutionCap(process.env.OPENAI_IMAGE_MAX_RESOLUTION ?? '2k');
     const size = capImageSize(normalizeImageSize(input.size), maxResolution);
@@ -115,8 +166,9 @@ export class ImageModelService {
 
     if (!response.ok) {
       const message = await response.text();
-      throw new ServiceUnavailableException(`GPT Image 2 生成失败: ${message.slice(0, 300)}`);
+      throw new ServiceUnavailableException(`GPT Image generation failed: ${message.slice(0, 300)}`);
     }
+
     const body = (await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
     const result = body.data?.[0];
     if (result?.b64_json) {
@@ -126,6 +178,57 @@ export class ImageModelService {
       const imageResponse = await fetch(result.url);
       return { data: Buffer.from(await imageResponse.arrayBuffer()), extension: '.png' };
     }
-    throw new ServiceUnavailableException('GPT Image 2 未返回图片');
+
+    throw new ServiceUnavailableException('GPT Image generation returned no image data');
+  }
+
+  private async generateWithDoubaoSeedream(input: GenerateImageInput, model: string) {
+    const apiKey = process.env.DOUBAO_API_KEY ?? process.env.ARK_API_KEY;
+    if (!apiKey) throw new ServiceUnavailableException('Missing DOUBAO_API_KEY or ARK_API_KEY');
+
+    const baseUrl = (
+      process.env.DOUBAO_BASE_URL ??
+      process.env.ARK_BASE_URL ??
+      'https://ark.cn-beijing.volces.com/api/v3'
+    ).replace(/\/$/, '');
+    const maxResolution = parseImageResolutionCap(process.env.DOUBAO_IMAGE_MAX_RESOLUTION ?? '2k');
+    const size = capImageSize(normalizeImageSize(input.size), maxResolution);
+
+    const response = await fetch(`${baseUrl}/images/generations`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        prompt: input.prompt,
+        size,
+        watermark: false,
+        response_format: 'url',
+      }),
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      throw new ServiceUnavailableException(`Doubao Seedream generation failed: ${message.slice(0, 300)}`);
+    }
+
+    const body = (await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
+    const result = body.data?.[0];
+
+    if (result?.b64_json) {
+      return { data: Buffer.from(result.b64_json, 'base64'), extension: '.png' };
+    }
+
+    if (result?.url) {
+      const imageResponse = await fetch(result.url);
+      if (!imageResponse.ok) {
+        throw new ServiceUnavailableException('Doubao Seedream returned an unreadable image URL');
+      }
+      return { data: Buffer.from(await imageResponse.arrayBuffer()), extension: '.png' };
+    }
+
+    throw new ServiceUnavailableException('Doubao Seedream returned no image data');
   }
 }

@@ -90,6 +90,13 @@ export function getAvailableResolutionOptions(maxCap: ImageResolutionCap = '2k')
   );
 }
 
+export function isResolutionTierAvailable(
+  resolution: ResolutionTier,
+  maxCap: ImageResolutionCap = '2k',
+): boolean {
+  return RESOLUTION_RANK[resolution] <= CAP_RANK[maxCap];
+}
+
 export function clampSettingsToMaxResolution(
   settings: ImageSizeSettings,
   maxCap: ImageResolutionCap,

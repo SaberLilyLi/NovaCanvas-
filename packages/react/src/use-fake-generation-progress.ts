@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
-const EXPECTED_DURATION_MS = 5 * 60 * 1000;
+const DEFAULT_EXPECTED_DURATION_MS = 5 * 60 * 1000;
+const SEEDREAM_EXPECTED_DURATION_MS = 10 * 1000;
+const IMAGE2_EXPECTED_DURATION_MS = 3 * 60 * 1000;
 const FINISH_DURATION_MS = 3 * 1000;
 const MAX_RUNNING_PROGRESS = 99;
 
@@ -17,6 +19,7 @@ export function useFakeGenerationProgress(
   batchKey: string,
   isComplete: boolean,
   enabled: boolean,
+  generationModel?: string,
 ) {
   const [progress, setProgress] = useState(0);
   const startedAtRef = useRef(Date.now());
@@ -24,6 +27,23 @@ export function useFakeGenerationProgress(
   const progressRef = useRef(0);
   const frameRef = useRef<number>();
   const bumpTimerRef = useRef<number>();
+  const expectedDurationMsRef = useRef(DEFAULT_EXPECTED_DURATION_MS);
+
+  useEffect(() => {
+    const normalizedModel = generationModel?.trim().toLowerCase() ?? '';
+
+    if (normalizedModel.includes('seedream')) {
+      expectedDurationMsRef.current = SEEDREAM_EXPECTED_DURATION_MS;
+      return;
+    }
+
+    if (normalizedModel.includes('image-2') || normalizedModel.includes('gpt-image-2')) {
+      expectedDurationMsRef.current = IMAGE2_EXPECTED_DURATION_MS;
+      return;
+    }
+
+    expectedDurationMsRef.current = DEFAULT_EXPECTED_DURATION_MS;
+  }, [generationModel]);
 
   useEffect(() => {
     startedAtRef.current = Date.now();
@@ -73,7 +93,8 @@ export function useFakeGenerationProgress(
       const delay = randomBetween(1200, 5500);
       bumpTimerRef.current = window.setTimeout(() => {
         const elapsed = Date.now() - startedAtRef.current;
-        const timeRatio = Math.min(1, elapsed / EXPECTED_DURATION_MS);
+        const expectedDurationMs = expectedDurationMsRef.current;
+        const timeRatio = Math.min(1, elapsed / expectedDurationMs);
         const expectedCeiling = Math.min(
           MAX_RUNNING_PROGRESS,
           Math.round(timeRatio * MAX_RUNNING_PROGRESS + randomBetween(0, 6)),
@@ -87,7 +108,7 @@ export function useFakeGenerationProgress(
         progressRef.current = monotonic;
         setProgress(monotonic);
 
-        if (monotonic < MAX_RUNNING_PROGRESS && elapsed < EXPECTED_DURATION_MS) {
+        if (monotonic < MAX_RUNNING_PROGRESS && elapsed < expectedDurationMs) {
           scheduleRandomBump();
         }
       }, delay);

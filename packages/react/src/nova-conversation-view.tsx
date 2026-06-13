@@ -12,6 +12,7 @@ export type NovaConversationItem =
       type: 'generation-turn';
       id: string;
       prompt: string;
+      generationModel?: string;
       ratioLabel?: string;
       resolution?: ResolutionTier;
       slots?: GenerationSlot[];
@@ -25,6 +26,7 @@ export type NovaConversationItem =
       type: 'generation-batch';
       batchId: string;
       prompt: string;
+      generationModel?: string;
       ratioLabel?: string;
       resolution?: ResolutionTier;
       slots: GenerationSlot[];
@@ -45,8 +47,8 @@ export interface NovaConversationViewProps {
 }
 
 function resolveActionLabel(actionType?: 'regenerate' | 'refine' | 'create'): string | undefined {
-  if (actionType === 'regenerate') return '重新生成';
-  if (actionType === 'refine') return '细节修复';
+  if (actionType === 'regenerate') return 'Regenerate';
+  if (actionType === 'refine') return 'Refine';
   return undefined;
 }
 
@@ -63,9 +65,7 @@ function SdkMessageBubble({ message }: { message: Message }) {
   }
 
   return (
-    <article
-      className={`nova-conversation-item nova-conversation-item--${message.role}`}
-    >
+    <article className={`nova-conversation-item nova-conversation-item--${message.role}`}>
       {!isUser && (
         <div className="nova-conversation-item__avatar" aria-hidden>
           AI
@@ -75,17 +75,12 @@ function SdkMessageBubble({ message }: { message: Message }) {
         {!isUser && message.content && (
           <div className="nova-conversation-item__label">
             <span>Assistant</span>
-            {message.status === 'streaming' && <span>生成中</span>}
-            {message.status === 'error' && <span className="is-error">失败</span>}
+            {message.status === 'streaming' && <span>Generating</span>}
+            {message.status === 'error' && <span className="is-error">Failed</span>}
           </div>
         )}
         {message.content ? <p>{message.content}</p> : null}
       </div>
-      {isUser && (
-        <div className="nova-conversation-item__avatar is-user" aria-hidden>
-          你
-        </div>
-      )}
     </article>
   );
 }
@@ -104,6 +99,11 @@ function GenerationTurnView(props: {
   const turnPrompt = item.lastUserPrompt ?? item.prompt;
   const slotCount = item.slots?.length ?? 1;
   const hasCompletedImages = Boolean(item.slots?.some((slot) => slot.image));
+  const shouldHoldCompletedContent =
+    hasCompletedImages &&
+    Boolean(props.loadingSuggestions) &&
+    !item.suggestions?.length;
+  const shouldShowCompletedFooter = hasCompletedImages && !shouldHoldCompletedContent;
 
   return (
     <GenerationTurnCard
@@ -112,7 +112,7 @@ function GenerationTurnView(props: {
       ratioLabel={item.ratioLabel ?? '1:1'}
       resolution={item.resolution}
       footer={
-        hasCompletedImages || props.loadingSuggestions ? (
+        shouldShowCompletedFooter ? (
           <GenerationTurnFooter
             turnPrompt={turnPrompt}
             slotCount={slotCount}
@@ -128,10 +128,17 @@ function GenerationTurnView(props: {
         ) : null
       }
     >
-      {item.slots ? (
+      {shouldHoldCompletedContent ? (
+        <div className="nova-generation-turn__holding">
+          <span className="nova-generation-turn__holding-text">
+            Preparing images and prompt suggestions...
+          </span>
+        </div>
+      ) : item.slots ? (
         <GenerationSlotGrid
           slots={item.slots}
           isGenerating={item.isGenerating}
+          generationModel={item.generationModel}
           enableDownload={props.enableDownload}
         />
       ) : null}
@@ -162,6 +169,10 @@ export function NovaConversationView(props: NovaConversationViewProps) {
         }
 
         if (item.type === 'sdk') {
+          if (item.message.role === 'user') {
+            return null;
+          }
+
           return <SdkMessageBubble key={item.message.id} message={item.message} />;
         }
 

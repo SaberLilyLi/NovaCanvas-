@@ -30,6 +30,10 @@ class CreateGenerationDto {
   @IsString()
   sceneType?: string;
 
+  @IsOptional()
+  @IsString()
+  model?: string;
+
   @IsString()
   prompt!: string;
 
@@ -69,6 +73,10 @@ class PromptSuggestionsDto {
   @IsOptional()
   @IsString()
   sceneType?: string;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
 
   @IsString()
   lastUserPrompt!: string;

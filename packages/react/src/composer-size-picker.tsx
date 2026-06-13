@@ -1,12 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Input, Popover } from '@arco-design/web-react';
-import { Link2, Unlink2 } from 'lucide-react';
-import { normalizeImageDimensions } from '@novacanvas/types';
+import { useState } from 'react';
+import { Popover } from '@arco-design/web-react';
 import type { ImageResolutionCap } from '@novacanvas/types';
 import {
-  getAvailableResolutionOptions,
   getDimensionsForRatio,
   getResolutionLabel,
+  isResolutionTierAvailable,
+  RESOLUTION_OPTIONS,
   RATIO_PRESETS,
   type ImageSizeSettings,
   type RatioPreset,
@@ -38,14 +37,7 @@ function RatioIcon({ ratio }: { ratio: RatioPreset }) {
 
 export function ComposerSizePicker(props: ComposerSizePickerProps) {
   const [open, setOpen] = useState(false);
-  const resolutionOptions = useMemo(
-    () => getAvailableResolutionOptions(props.maxResolution ?? '2k'),
-    [props.maxResolution],
-  );
-  const triggerLabel = useMemo(
-    () => `${props.value.ratio} ${getResolutionLabel(props.value.resolution)}`,
-    [props.value.ratio, props.value.resolution],
-  );
+  const maxCap = props.maxResolution ?? '2k';
 
   const updateRatio = (ratio: RatioPreset) => {
     const { width, height } = getDimensionsForRatio(ratio, props.value.resolution);
@@ -55,40 +47,6 @@ export function ComposerSizePicker(props: ComposerSizePickerProps) {
   const updateResolution = (resolution: ResolutionTier) => {
     const { width, height } = getDimensionsForRatio(props.value.ratio, resolution);
     props.onChange({ ...props.value, resolution, width, height });
-  };
-
-  const getRatioParts = () => {
-    const parts = props.value.ratio.split(':').map((part) => Number(part));
-    return {
-      ratioWidth: parts[0] || 1,
-      ratioHeight: parts[1] || 1,
-    };
-  };
-
-  const updateWidth = (width: number) => {
-    if (!Number.isFinite(width) || width <= 0) return;
-    if (props.value.linked) {
-      const { ratioWidth, ratioHeight } = getRatioParts();
-      const height = Math.round((width * ratioHeight) / ratioWidth);
-      const normalized = normalizeImageDimensions(width, height);
-      props.onChange({ ...props.value, ...normalized });
-      return;
-    }
-    const normalized = normalizeImageDimensions(width, props.value.height);
-    props.onChange({ ...props.value, ...normalized });
-  };
-
-  const updateHeight = (height: number) => {
-    if (!Number.isFinite(height) || height <= 0) return;
-    if (props.value.linked) {
-      const { ratioWidth, ratioHeight } = getRatioParts();
-      const width = Math.round((height * ratioWidth) / ratioHeight);
-      const normalized = normalizeImageDimensions(width, height);
-      props.onChange({ ...props.value, ...normalized });
-      return;
-    }
-    const normalized = normalizeImageDimensions(props.value.width, height);
-    props.onChange({ ...props.value, ...normalized });
   };
 
   const panel = (
@@ -109,51 +67,29 @@ export function ComposerSizePicker(props: ComposerSizePickerProps) {
           ))}
         </div>
       </section>
-
       <section className="nova-size-picker__section">
-        <h4>选择分辨率</h4>
-        <div className="nova-size-picker__resolution">
-          {resolutionOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={props.value.resolution === option.value ? 'is-active' : ''}
-              onClick={() => updateResolution(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="nova-size-picker__section">
-        <h4>尺寸</h4>
-        <div className="nova-size-picker__dimensions">
-          <label>
-            <span>W</span>
-            <Input
-              size="small"
-              value={String(props.value.width)}
-              onChange={(value) => updateWidth(Number(value))}
-            />
-          </label>
-          <button
-            type="button"
-            className="nova-size-picker__link"
-            aria-label={props.value.linked ? '解除比例锁定' : '锁定比例'}
-            onClick={() => props.onChange({ ...props.value, linked: !props.value.linked })}
-          >
-            {props.value.linked ? <Link2 size={14} /> : <Unlink2 size={14} />}
-          </button>
-          <label>
-            <span>H</span>
-            <Input
-              size="small"
-              value={String(props.value.height)}
-              onChange={(value) => updateHeight(Number(value))}
-            />
-          </label>
-          <span className="nova-size-picker__unit">PX</span>
+        <h4>清晰度</h4>
+        <div className="nova-size-picker__resolution" role="group" aria-label="清晰度">
+          {RESOLUTION_OPTIONS.map((option) => {
+            const available = isResolutionTierAvailable(option.value, maxCap);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={[
+                  props.value.resolution === option.value ? 'is-active' : '',
+                  available ? '' : 'is-disabled',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                disabled={!available || props.disabled}
+                title={available ? undefined : '当前模型配置暂不支持该清晰度'}
+                onClick={() => updateResolution(option.value)}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
       </section>
     </div>
@@ -173,12 +109,19 @@ export function ComposerSizePicker(props: ComposerSizePickerProps) {
     >
       <button
         type="button"
-        className="nova-size-picker__trigger"
+        className="nova-size-picker__trigger nova-size-picker__trigger--jimeng"
         disabled={props.disabled}
+        aria-label="尺寸"
         aria-expanded={open}
       >
-        <RatioIcon ratio={props.value.ratio} />
-        <span>{triggerLabel}</span>
+        <span className="nova-size-picker__segment nova-size-picker__segment--ratio">
+          <RatioIcon ratio={props.value.ratio} />
+          <span>{props.value.ratio}</span>
+        </span>
+        <span className="nova-size-picker__segment-divider" aria-hidden />
+        <span className="nova-size-picker__segment nova-size-picker__segment--resolution">
+          {getResolutionLabel(props.value.resolution)}
+        </span>
       </button>
     </Popover>
   );

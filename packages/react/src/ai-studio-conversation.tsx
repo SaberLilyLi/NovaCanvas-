@@ -1,30 +1,36 @@
 import { AiComposer } from '@company/ai-studio-sdk/react';
 import type { ComposerAttachment } from '@company/ai-studio-sdk/types';
-import type { GeneratedImage, ImageResolutionCap } from '@novacanvas/types';
-import { useMemo, useRef } from 'react';
+import type { ImageResolutionCap } from '@novacanvas/types';
 import '@company/ai-studio-sdk/styles.css';
+import { ComposerCountPicker } from './composer-count-picker';
+import { ComposerModelPicker, type ComposerModelOption } from './composer-model-picker';
 import { ComposerSizePicker } from './composer-size-picker';
 import { GENERATION_BUSY_PLACEHOLDER } from './generation-lock';
 import type { ImageSizeSettings } from './image-size-settings';
 import type { NovaConversationItem } from './nova-conversation-view';
 import { NovaConversationView } from './nova-conversation-view';
-import { useComposerCompact } from './use-composer-compact';
 
 export interface AiStudioConversationProps {
+  composerKey?: number;
   theme: 'light' | 'dark';
   isEmpty?: boolean;
   items: NovaConversationItem[];
   imageSizeSettings: ImageSizeSettings;
   maxImageResolution?: ImageResolutionCap;
   count: number;
+  creditCostPerImage?: number;
+  generationModel?: string;
+  generationModelOptions?: ComposerModelOption[];
   defaultValue?: string;
   isSubmitting: boolean;
   isInteractionLocked?: boolean;
   enableImageEdit?: boolean;
   enableDownload?: boolean;
+  enableModelSelector?: boolean;
   loadingSuggestionTurnIds?: string[];
   onImageSizeSettingsChange: (value: ImageSizeSettings) => void;
   onCountChange: (value: number) => void;
+  onGenerationModelChange?: (value: string) => void;
   onTurnContinueEdit?: (turnPrompt: string) => void;
   onTurnRegenerate?: (turnPrompt: string, slotCount: number) => void;
   onSuggestionSelect?: (prompt: string) => void;
@@ -32,33 +38,20 @@ export interface AiStudioConversationProps {
 }
 
 export function AiStudioConversation(props: AiStudioConversationProps) {
-  const actionOptions = useMemo(
-    () => [
-      {
-        id: 'count',
-        label: '数量',
-        value: String(props.count),
-        options: [1, 2, 3, 4].map((item) => ({
-          label: `${item} 张`,
-          value: String(item),
-        })),
-      },
-    ],
-    [props.count],
-  );
-
   const composerDisabled = props.isSubmitting || Boolean(props.isInteractionLocked);
-  const messagesRef = useRef<HTMLDivElement>(null);
-  const isComposerCompact =
-    useComposerCompact(messagesRef, !props.isEmpty, composerDisabled) &&
-    !composerDisabled;
+  const creditCost = Math.max(1, props.creditCostPerImage ?? 1);
+  const totalCredits = props.count * creditCost;
+  const showModelPicker =
+    props.enableModelSelector !== false &&
+    Boolean(props.generationModelOptions?.length) &&
+    Boolean(props.onGenerationModelChange);
 
   return (
     <div
       className={`nova-composer__ai-studio ${props.isEmpty ? 'is-empty' : 'has-messages'}`}
       data-theme={props.theme === 'dark' ? 'dark' : 'light'}
     >
-      <div ref={messagesRef} className="nova-composer__ai-studio-messages">
+      <div className="nova-composer__ai-studio-messages">
         <NovaConversationView
           items={props.items}
           enableImageEdit={props.enableImageEdit}
@@ -70,23 +63,10 @@ export function AiStudioConversation(props: AiStudioConversationProps) {
           onSuggestionSelect={props.onSuggestionSelect}
         />
       </div>
-      <div
-        className={[
-          'nova-composer__ai-studio-composer',
-          isComposerCompact ? 'is-compact' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-      >
-        <div
-          className={[
-            'nova-composer__composer-shell',
-            isComposerCompact ? 'is-compact' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
+      <div className="nova-composer__ai-studio-composer">
+        <div className="nova-composer__composer-shell">
           <AiComposer
+            key={props.composerKey}
             defaultValue={props.defaultValue ?? ''}
             theme={props.theme === 'dark' ? 'dark' : 'light'}
             placeholder={
@@ -94,10 +74,8 @@ export function AiStudioConversation(props: AiStudioConversationProps) {
                 ? GENERATION_BUSY_PLACEHOLDER
                 : '请描述你想生成的图片...'
             }
-            minRows={isComposerCompact ? 1 : 2}
-            maxRows={isComposerCompact ? 1 : 6}
-            showActionOptions
-            actionOptions={actionOptions}
+            minRows={2}
+            maxRows={6}
             disabled={composerDisabled}
             uploadOptions={
               composerDisabled
@@ -108,13 +86,18 @@ export function AiStudioConversation(props: AiStudioConversationProps) {
                     maxFileSize: 10 * 1024 * 1024,
                   }
             }
-            onActionOptionChange={(id: string, value: string) => {
-              if (composerDisabled) return;
-              if (id === 'count') props.onCountChange(Number(value));
-            }}
             onSend={props.onSend}
           />
           <div className="nova-composer__composer-toolbar-inject">
+            {showModelPicker ? (
+              <ComposerModelPicker
+                value={props.generationModel}
+                options={props.generationModelOptions ?? []}
+                disabled={composerDisabled}
+                openBelow={props.isEmpty}
+                onChange={props.onGenerationModelChange!}
+              />
+            ) : null}
             <ComposerSizePicker
               value={props.imageSizeSettings}
               disabled={composerDisabled}
@@ -122,6 +105,19 @@ export function AiStudioConversation(props: AiStudioConversationProps) {
               maxResolution={props.maxImageResolution}
               onChange={props.onImageSizeSettingsChange}
             />
+            <ComposerCountPicker
+              value={props.count}
+              disabled={composerDisabled}
+              openBelow={props.isEmpty}
+              onChange={props.onCountChange}
+            />
+          </div>
+          <div className="nova-composer__composer-credits-inject" aria-live="polite">
+            <span className="nova-composer__composer-credits-icon" aria-hidden>
+              ✦
+            </span>
+            <span className="nova-composer__composer-credits-value">{totalCredits}</span>
+            <span className="nova-composer__composer-credits-unit">积分</span>
           </div>
         </div>
       </div>
