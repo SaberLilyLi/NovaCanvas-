@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #f2f5f4;
+  background: #0c0f10;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+  padding: 0 22px;
+  background: #0c0f10;
+  border-bottom: 1px solid #282d30;
+}
+
+.app-header__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  span {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    background: #20a69a;
+    border-radius: 6px;
+  }
+
+  strong {
+    font-size: 13px;
+  }
+}
+
+.app-header__status {
+  color: #71807c;
+  font-size: 10px;
+}
+
+.app-workspace {
+  padding: 0;
+}
+
+@media (max-width: 760px) {
+  .app-header {
+    height: 60px;
+    padding: 0 12px;
+  }
+
+  .app-header__status {
+    display: none;
+  }
+}

@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  conversations Conversation[]
+  images        Image[]
+  tasks         GenerationTask[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Conversation {
+  id            String           @id @default(cuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+  bizType       String
+  sceneType     String?
+  title         String?
+  latestImageId       String?
+  selectedImageId     String?
+  latestResultGroupId String?
+  messages      Message[]
+  images        Image[]
+  tasks         GenerationTask[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  imageIds       Json
+  taskIds        Json
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Image {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  url            String
+  storageKey     String
+  type           String
+  sourceImageIds Json
+  prompt         String?
+  bizType        String?
+  sceneType      String?
+  width          Int?
+  height         Int?
+  imageIndex     Int?
+  resultGroupId  String?
+  resultOf       GenerationTask[] @relation("TaskResult")
+  createdAt      DateTime      @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model GenerationTask {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  bizType        String
+  sceneType      String?
+  status         String
+  taskType       String
+  prompt         String
+  inputImageIds  Json
+  resultImageId  String?
+  resultImageIds Json?
+  resultGroupId  String?
+  imageIndex     Int?
+  resultImage    Image?       @relation("TaskResult", fields: [resultImageId], references: [id])
+  progress       Int          @default(0)
+  errorMessage   String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([conversationId, createdAt])
+  @@index([status, createdAt])
+}

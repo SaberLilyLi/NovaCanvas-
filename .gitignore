@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.turbo/
+.env
+*.log
+coverage/
+apps/server/uploads/
+apps/server/prisma/dev.db
+.DS_Store

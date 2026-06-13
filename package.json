@@ -1,0 +1,23 @@
+{
+  "name": "novacanvas-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:web": "pnpm --filter @novacanvas/web dev",
+    "dev:server": "pnpm --filter @novacanvas/server dev",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "format": "prettier --write .",
+    "db:generate": "pnpm --filter @novacanvas/server prisma:generate",
+    "db:push": "pnpm --filter @novacanvas/server prisma:push"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  }
+}
